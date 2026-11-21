@@ -4,7 +4,7 @@
 
 - Writs you turned in today get a green check in the Have column, and their name is dimmed. Turn-ins are also remembered per character until the daily reset, so the check shows even when the game's completion flag does not.
 - Removed the Apprentice and Unknown filter boxes; no writ has those tiers, so they did nothing.
-- The Auction House launcher is now a grey tab like Auctionator's tabs at the bottom of the Auction House, standing on top of the window, with a writ icon and a "Writs Ledger" label.
+- The Auction House button now matches Auctionator's buttons: same style and height, a writ icon and a "Writs Ledger" label, attached to the top of the Auction House window.
 - Even near-black window background (no more grey texture and inner frame).
 - Text size setting (80-150%): Options > AddOns > Writs Ledger, the A- / A+ buttons in the title bar, or /wledger size 120. It scales the whole table so text never gets cut off.
 

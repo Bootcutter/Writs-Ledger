@@ -1004,91 +1004,11 @@ local function WritIcon()
     return FALLBACK_ICON
 end
 
-local TAB_TEMPLATES = { "AuctionHouseFrameDisplayModeTabTemplate", "AuctionTabTemplate" }
-local ICON_SIZE, ICON_GAP, TAB_PADDING, TAB_MIN_WIDTH = 16, 4, 20, 70
+local ICON_SIZE, ICON_GAP = 16, 4
 
--- Mirrors a texture top-to-bottom (the tab art is drawn hanging down).
-local function FlipVertical(texture)
-    local ok, ulx, uly, llx, lly, urx, ury, lrx, lry = pcall(texture.GetTexCoord, texture)
-    if ok and ulx then texture:SetTexCoord(llx, lly, ulx, uly, lrx, lry, urx, ury) end
-end
-
-local MIRRORED = { TOP = "BOTTOM", BOTTOM = "TOP", TOPLEFT = "BOTTOMLEFT", BOTTOMLEFT = "TOPLEFT",
-    TOPRIGHT = "BOTTOMRIGHT", BOTTOMRIGHT = "TOPRIGHT" }
-
--- Moves a region's anchors to the mirrored side (for the tab's label).
-local function MirrorAnchors(region)
-    local points = {}
-    for index = 1, region:GetNumPoints() do points[index] = { region:GetPoint(index) } end
-    region:ClearAllPoints()
-    for _, p in ipairs(points) do
-        region:SetPoint(MIRRORED[p[1]] or p[1], p[2], MIRRORED[p[3]] or p[3], p[4], -(p[5] or 0))
-    end
-end
-
--- Width for the label plus the icon, like Auctionator's own tabs.
-local function FitTab(tab)
-    local label = tab:GetFontString()
-    if not label then return end
-    local width = math.ceil(label:GetStringWidth()) + ICON_SIZE + ICON_GAP + TAB_PADDING * 2
-    tab:SetWidth(math.max(TAB_MIN_WIDTH, width))
-end
-
--- A grey Auction House tab, like Auctionator's tabs at the bottom, flipped to
--- stand on top of the window. Nil if this client has no such tab template.
-local function CreateAHTab(ahFrame)
-    local tab
-    for _, template in ipairs(TAB_TEMPLATES) do
-        local ok, created = pcall(CreateFrame, "Button", "WritsLedgerAHTab", ahFrame, template)
-        if ok and created then
-            tab = created
-            break
-        end
-    end
-    if not tab then return nil end
-    tab:SetText("Writs Ledger")
-    if PanelTemplates_DeselectTab then pcall(PanelTemplates_DeselectTab, tab) end -- grey, unselected look
-
-    -- Flip every texture once (the highlight can be both a region and the
-    -- button's highlight texture; flipping it twice would undo it).
-    local flipped = {}
-    local function Flip(texture)
-        if texture and not flipped[texture] then
-            flipped[texture] = true
-            FlipVertical(texture)
-        end
-    end
-    for _, region in ipairs({ tab:GetRegions() }) do
-        if region:IsObjectType("Texture") then Flip(region) end
-    end
-    for _, getter in ipairs({ "GetHighlightTexture", "GetNormalTexture", "GetPushedTexture" }) do
-        if tab[getter] then Flip(tab[getter](tab)) end
-    end
-
-    local label = tab:GetFontString()
-    local icon = tab:CreateTexture(nil, "OVERLAY")
-    icon:SetSize(ICON_SIZE, ICON_SIZE)
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) -- trim the icon border
-    if label then
-        MirrorAnchors(label)
-        -- Shift the label right to make room for the icon.
-        local point, relative, relativePoint, x, y = label:GetPoint(1)
-        label:SetPoint(point, relative, relativePoint, (x or 0) + (ICON_SIZE + ICON_GAP) / 2, y or 0)
-        icon:SetPoint("RIGHT", label, "LEFT", -ICON_GAP, 0)
-    else
-        icon:SetPoint("LEFT", TAB_PADDING, 0)
-    end
-    tab.icon = icon
-    FitTab(tab)
-    -- The template resizes tabs when shown; keep room for the icon.
-    tab:HookScript("OnShow", FitTab)
-    tab:SetScript("OnClick", function() ns.ToggleWindow() end)
-    SetSimpleTooltip(tab, "Writs Ledger", "Open the Craftsman's Writs table (also /wledger).")
-    tab.isTab = true
-    return tab
-end
-
--- Fallback: a standard button, same style and height as Auctionator's.
+-- A standard red button, same style and height as Auctionator's buttons.
+-- (Not a tab: the Auction House tab templates add themselves to the
+-- window's tab list, and Auctionator lines its tabs up after the last one.)
 local function CreateAHButton()
     local ok, button = pcall(CreateFrame, "Button", nil, UIParent, "UIPanelDynamicResizeButtonTemplate")
     if not ok or not button then button = CreateFrame("Button", nil, UIParent, "UIPanelButtonTemplate") end
@@ -1116,21 +1036,16 @@ end
 
 function ns.ShowAHButton()
     local ahFrame = AuctionFrame()
-    local attached = ahFrame and ahFrame:IsShown()
-    if not ahButton then
-        ahButton = attached and CreateAHTab(ahFrame) or CreateAHButton()
-    end
+    if not ahButton then ahButton = CreateAHButton() end
     ahButton.icon:SetTexture(WritIcon()) -- the item icon may only load later
     ahButton:ClearAllPoints()
-    if attached then
-        -- On top of the Auction House window, near its right edge; it moves,
-        -- scales and hides with the window. A tab tucks under the top border
-        -- the way the bottom tabs tuck under the bottom one.
+    if ahFrame and ahFrame:IsShown() then
+        -- On top of the Auction House window, flush with its right edge; it
+        -- moves, scales and hides with the window.
         ahButton:SetParent(ahFrame)
         ahButton:SetFrameStrata(ahFrame:GetFrameStrata())
-        ahButton:SetFrameLevel(ahButton.isTab and math.max(1, ahFrame:GetFrameLevel() - 1) or ahFrame:GetFrameLevel() + 10)
-        ahButton:SetPoint("BOTTOMRIGHT", ahFrame, "TOPRIGHT", -24, ahButton.isTab and -4 or 0)
-        if ahButton.isTab then FitTab(ahButton) end
+        ahButton:SetFrameLevel(ahFrame:GetFrameLevel() + 10)
+        ahButton:SetPoint("BOTTOMRIGHT", ahFrame, "TOPRIGHT", -6, 0)
     else
         -- Unknown Auction House frame on this client: top centre of the screen.
         ahButton:SetParent(UIParent)

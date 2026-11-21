@@ -20,7 +20,7 @@ Writs Ledger lists all 150 Craftsman's Writs. Each row shows the writ's tier, it
 
 1. Install **Auctionator** and **Writs Ledger**.
 2. Go to an Auction House and click **Full Scan** in the table, or run a scan from Auctionator. Prices appear once a scan has finished.
-3. Type `/wledger`, or click the **Writs Ledger** tab on top of the Auction House window.
+3. Type `/wledger`, or click the **Writs Ledger** button on top of the Auction House window.
 
 ## Commands and clicks
 
