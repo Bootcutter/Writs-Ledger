@@ -13,3 +13,4 @@
 10. Complete a writ: its Have column shows grey "done" for the rest of the day.
 11. Carry a writ and its item: the Have column shows a gold **W** and the item count.
 12. Report anything that does not fill in (prices, counts, turn-ins) together with whether the AH you use looks like the old (Classic) or new (Retail) Auction House.
+13. Route fix (0.2.1): Solid Sharpening Stone, Fire Protection Potion and Nightscape Shoulders show Searing Gorge (pale) after updating. Accept one of them while in Ironforge: chat confirms Searing Gorge, not Dun Morogh. Catseye Ultra Goggles shows Feralas, Dusky Bracers Dustwallow Marsh.

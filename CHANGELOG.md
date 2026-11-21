@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Fixed: a writ's turn-in could be learned as a point on the way there (for example Dun Morogh for Searing Gorge writs, or The Barrens for Feralas). Turn-ins are now read from the quest's own map marker, and wrongly learned ones are cleared and learned again the next time you have the writ.
+
 ## 0.2.0
 
 First public release.

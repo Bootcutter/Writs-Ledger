@@ -234,28 +234,47 @@ local function RootMap()
     return mapID
 end
 
--- The turn-in is "the location marked on your map": find the map marker.
-local function FindQuestLocation(questID)
-    if C_QuestLog and C_QuestLog.GetNextWaypoint then
-        local ok, mapID, x, y = pcall(C_QuestLog.GetNextWaypoint, questID)
-        if ok and type(mapID) == "number" and type(x) == "number" and type(y) == "number" then
-            return mapID, x, y
+-- The quest's marker on one map, or nil.
+local function MarkerOnMap(questID, mapID)
+    local ok, quests = pcall(C_QuestLog.GetQuestsOnMap, mapID)
+    if not ok or type(quests) ~= "table" then return end
+    for _, quest in ipairs(quests) do
+        if Plain(quest.questID) == questID then
+            local x, y = Plain(quest.x), Plain(quest.y)
+            if type(x) == "number" and type(y) == "number" then return x, y end
         end
     end
-    if not (C_QuestLog and C_QuestLog.GetQuestsOnMap and C_Map and C_Map.GetMapChildrenInfo) then return end
+end
+
+-- The turn-in is "the location marked on your map": find the quest's own map
+-- marker. C_QuestLog.GetNextWaypoint is not used: it gives the next step of
+-- the route there (a zone exit, a tram, a flight master), not the turn-in.
+-- `expectedMapID` (the Data.lua turn-in map, if any) breaks ties.
+local function FindQuestLocation(questID, expectedMapID)
+    if not (C_QuestLog and C_QuestLog.GetQuestsOnMap) then return end
+    -- The map the game files the quest under, when the client says.
+    if C_QuestLog.GetQuestUiMapID then
+        local ok, questMap = pcall(C_QuestLog.GetQuestUiMapID, questID)
+        questMap = ok and Plain(questMap)
+        if type(questMap) == "number" and questMap > 0 then
+            local x, y = MarkerOnMap(questID, questMap)
+            if x then return questMap, x, y end
+        end
+    end
+    if not C_Map or not C_Map.GetMapChildrenInfo then return end
     local root = RootMap()
     if not root then return end
     local ok, maps = pcall(C_Map.GetMapChildrenInfo, root, nil, true)
     if not ok or type(maps) ~= "table" then return end
-    -- The most detailed map that shows the marker (zone or city over continent).
+    -- The most detailed map that shows the marker (zone or city over continent);
+    -- among equally detailed maps, the one Data.lua expects.
     local best
     for _, map in ipairs(maps) do
-        local okQuests, quests = pcall(C_QuestLog.GetQuestsOnMap, map.mapID)
-        if okQuests and type(quests) == "table" then
-            for _, quest in ipairs(quests) do
-                if quest.questID == questID and (not best or (map.mapType or 0) > (best.mapType or 0)) then
-                    best = { mapID = map.mapID, mapType = map.mapType, x = quest.x, y = quest.y }
-                end
+        local x, y = MarkerOnMap(questID, map.mapID)
+        if x then
+            local rank = (map.mapType or 0) * 2 + (map.mapID == expectedMapID and 1 or 0)
+            if not best or rank > best.rank then
+                best = { mapID = map.mapID, rank = rank, x = x, y = y }
             end
         end
     end
@@ -269,10 +288,15 @@ local function LearnTurnIns()
         ns.AddWrit(item)
         local learned = ns.Learned(item, true)
         if learned.turnIn then return end
-        local mapID, x, y = FindQuestLocation(questID)
+        local entry = ns.writsByItem[item]
+        local expected = entry and entry.turnIn and entry.turnIn.mapID
+        local mapID, x, y = FindQuestLocation(questID, expected)
         if mapID and x and y then
             local info = C_Map.GetMapInfo and C_Map.GetMapInfo(mapID)
-            learned.turnIn = { mapID = mapID, x = x, y = y, zone = info and info.name or ("map " .. mapID) }
+            learned.turnIn = {
+                mapID = mapID, x = x, y = y, zone = info and info.name or ("map " .. mapID),
+                method = ns.TURN_IN_METHOD,
+            }
             changed = true
             ns.Report(("confirmed the turn-in for %s: %s %.1f, %.1f"):format(item, learned.turnIn.zone, x * 100, y * 100))
         end

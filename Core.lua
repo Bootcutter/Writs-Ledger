@@ -63,6 +63,24 @@ function ns.InitializeDatabase()
     for _, seed in ipairs(ns.SeedWrits or {}) do AddWrit(seed) end
     -- Writs learned in-game that the seed list does not have.
     for item in pairs(db.writs) do AddWrit(item) end
+    ns.DropRouteTurnIns()
+end
+
+-- Turn-ins learned before 0.2.1 could be a step on the route (e.g. a point in
+-- Dun Morogh for a Searing Gorge writ). Drop those that disagree with Data.lua;
+-- they are learned again, correctly, the next time the writ is in your log.
+ns.TURN_IN_METHOD = 2
+function ns.DropRouteTurnIns()
+    for item, learned in pairs(db.writs) do
+        local turnIn = type(learned) == "table" and learned.turnIn
+        if type(turnIn) == "table" and turnIn.method ~= ns.TURN_IN_METHOD then
+            local seed = ns.writsByItem[item]
+            local expected = seed and seed.turnIn and seed.turnIn.mapID
+            if expected and turnIn.mapID ~= expected then
+                learned.turnIn = nil
+            end
+        end
+    end
 end
 
 -- What was learned about one writ (created on first write).
