@@ -14,13 +14,13 @@ Writs Ledger lists all 150 Craftsman's Writs. Each row shows the writ's tier, it
 - **Full Scan button.** Starts Auctionator's own full scan from the table. The table updates when the scan finishes.
 - **Turn-in points.** Shows the zone and coordinates for 111 writs from the start. Click the zone to open the world map with a waypoint on the spot. Turn-in points for the rest are learned when you accept those writs.
 - **Filters and sorting.** Filter by tier, profession, turn-in zone (grouped by continent), "Only what I have" and name search. Click a column header to sort.
-- **Your progress.** Shows which writs and items are in your bags, and marks writs you have already done today.
+- **Your progress.** Shows which writs and items are in your bags, and puts a green check on writs this character has already turned in today.
 
 ## Getting started
 
 1. Install **Auctionator** and **Writs Ledger**.
 2. Go to an Auction House and click **Full Scan** in the table, or run a scan from Auctionator. Prices appear once a scan has finished.
-3. Type `/wledger`, or click the **Writs** button above the Auction House window.
+3. Type `/wledger`, or click the **Writs Ledger** tab on top of the Auction House window.
 
 ## Commands and clicks
 
@@ -28,6 +28,7 @@ Writs Ledger lists all 150 Craftsman's Writs. Each row shows the writ's tier, it
 |---|---|
 | `/wledger` | Opens or closes the table. |
 | `/wledger learn` | Reads your bags and quest log again. |
+| `/wledger size 120` | Sets the text and window size, from 80 to 150%. Also in **Options > AddOns > Writs Ledger** and with the **A- / A+** buttons in the window's title bar. |
 | Click a column header | Sorts by that column. Click again to reverse it. Writs without a price always come last. |
 | Click a turn-in zone | Opens the world map with a waypoint on the turn-in spot. This closes the Auction House if it is open. Untick **Open map on turn-in click** to set only the waypoint. |
 | Click elsewhere on a row | Sets the waypoint only. |

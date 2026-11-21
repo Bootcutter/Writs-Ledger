@@ -184,8 +184,10 @@ local function DrawRow(row, entry)
     end
     local tier = ns.Tier(entry)
     local r, g, b = unpack(ns.TierColor(tier))
+    local done = ns.DoneToday(entry)
+    local dim = done and 0.5 or 1 -- done today: name dimmed, check in Have
     row.cells.name:SetText(entry.item)
-    row.cells.name:SetTextColor(r, g, b)
+    row.cells.name:SetTextColor(r * dim, g * dim, b * dim)
     row.cells.prof:SetText(ns.Profession(entry) or "|cff808080?|r")
 
     local count, known = ns.Count(entry)
@@ -193,7 +195,7 @@ local function DrawRow(row, entry)
 
     local writs, items = OwnedCounts(entry)
     local have = {}
-    if ns.DoneToday(entry) then have[#have + 1] = "|cff808080done|r" end
+    if done then have[#have + 1] = "|TInterface\\RaidFrame\\ReadyCheck-Ready:14:14|t" end
     if writs > 0 then have[#have + 1] = "|cffffd100W|r" end
     if items > 0 then have[#have + 1] = "|cff20ff20" .. items .. "|r" end
     row.cells.have:SetText(#have > 0 and table.concat(have, " ") or "")
@@ -540,7 +542,7 @@ local function CreateZonePopup()
         tile = true, tileSize = 16, edgeSize = 16,
         insets = { left = 4, right = 4, top = 4, bottom = 4 },
     })
-    zonePopup:SetBackdropColor(0.05, 0.05, 0.05, 0.97)
+    zonePopup:SetBackdropColor(0, 0, 0, 0.95)
     zonePopup:SetPoint("TOPLEFT", zoneButton, "BOTTOMLEFT", 0, -2)
     zonePopup:SetFrameLevel(frame:GetFrameLevel() + 20)
     zonePopup:EnableMouse(true) -- clicks do not fall through to the rows
@@ -590,7 +592,17 @@ local function CreateWindow()
         local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
         close:SetPoint("TOPRIGHT", -4, -4)
     end
+    -- One even, near-black background: the template's tiled grey background
+    -- and its inner inset frame are replaced.
+    if frame.Bg and frame.Bg.SetColorTexture then pcall(frame.Bg.SetColorTexture, frame.Bg, 0, 0, 0, 0.95) end
+    if frame.Inset then pcall(frame.Inset.Hide, frame.Inset) end
+    if frame.InsetBg then pcall(frame.InsetBg.Hide, frame.InsetBg) end
+    local background = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
+    background:SetPoint("TOPLEFT", 2, -2)
+    background:SetPoint("BOTTOMRIGHT", -2, 2)
+    background:SetColorTexture(0, 0, 0, 0.95)
     frame:SetSize(WIDTH, -HEADER_Y + 18 + VISIBLE_ROWS * ROW_HEIGHT + 34)
+    frame:SetScale(ns.WindowScale())
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)
@@ -610,7 +622,9 @@ local function CreateWindow()
     -- Filter bar ---------------------------------------------------------------
     local x = 14
     tierButtons = {}
-    for _, tier in ipairs({ "Apprentice", "Journeyman", "Expert", "Artisan", "Unknown" }) do
+    -- No Apprentice or Unknown box: no writ has those tiers, so they filtered
+    -- nothing. Such writs still show (state.tiers keeps them on).
+    for _, tier in ipairs({ "Journeyman", "Expert", "Artisan" }) do
         local button = CreateFrame("Button", nil, frame)
         button:SetHeight(20)
         button.check = button:CreateTexture(nil, "ARTWORK")
@@ -800,7 +814,35 @@ local function CreateWindow()
             ns.RefreshWindow()
         end
     end)
+    -- Size buttons, left of the close button: A- / A+.
+    local function SizeButton(label, delta, anchorX, tooltip)
+        local button = CreateFrame("Button", nil, frame)
+        button:SetSize(24, 16)
+        button:SetPoint("TOPRIGHT", frame, "TOPRIGHT", anchorX, -4)
+        local text = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        text:SetAllPoints()
+        text:SetText(label)
+        button:SetScript("OnClick", function()
+            ns.ApplyWindowScale(ns.WindowScale() + delta)
+        end)
+        button:SetScript("OnEnter", function(self)
+            text:SetTextColor(1, 1, 1)
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:SetText(tooltip)
+            GameTooltip:AddLine(("Now %d%%. Also in Options > AddOns > Writs Ledger, or /wledger size 120.")
+                :format(ns.WindowScale() * 100 + 0.5), 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        button:SetScript("OnLeave", function()
+            text:SetTextColor(1, 0.82, 0)
+            GameTooltip:Hide()
+        end)
+    end
+    SizeButton("A+", ns.SCALE_STEP, -30, "Bigger text")
+    SizeButton("A-", -ns.SCALE_STEP, -56, "Smaller text")
+
     frame:SetScript("OnShow", function()
+        frame:SetScale(ns.WindowScale())
         openMap:SetChecked(ns.OpenMapOnClick())
         RefreshTierButtons()
         ns.RefreshWindow()
@@ -811,6 +853,85 @@ function ns.ToggleWindow()
     if not frame then CreateWindow() end
     frame:SetShown(not frame:IsShown())
 end
+
+-- Window size ---------------------------------------------------------------------
+
+local settingsSlider -- the slider in Options > AddOns, if the panel was registered
+
+-- Saves a new size and applies it to the open window and the options slider.
+function ns.ApplyWindowScale(value)
+    local scale = ns.SetWindowScale(value)
+    if frame then frame:SetScale(scale) end
+    if settingsSlider and math.abs(settingsSlider:GetValue() - scale * 100) > 0.5 then
+        settingsSlider:SetValue(scale * 100)
+    end
+    return scale
+end
+
+-- Options > AddOns > Writs Ledger: a panel with the size slider.
+local function CreateSettingsPanel()
+    local panel = CreateFrame("Frame")
+    panel.name = "Writs Ledger"
+
+    local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText("Writs Ledger")
+
+    local label = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    label:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -20)
+
+    local slider = CreateFrame("Slider", nil, panel)
+    slider:SetOrientation("HORIZONTAL")
+    slider:SetSize(240, 16)
+    slider:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 4, -12)
+    slider:SetMinMaxValues(ns.SCALE_MIN * 100, ns.SCALE_MAX * 100)
+    slider:SetValueStep(ns.SCALE_STEP * 100)
+    slider:SetObeyStepOnDrag(true)
+    local track = slider:CreateTexture(nil, "BACKGROUND")
+    track:SetPoint("LEFT")
+    track:SetPoint("RIGHT")
+    track:SetHeight(6)
+    track:SetColorTexture(0, 0, 0, 0.6)
+    slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+    local low = slider:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    low:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", 0, -2)
+    low:SetText(("%d%%"):format(ns.SCALE_MIN * 100))
+    local high = slider:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    high:SetPoint("TOPRIGHT", slider, "BOTTOMRIGHT", 0, -2)
+    high:SetText(("%d%%"):format(ns.SCALE_MAX * 100))
+
+    local function ShowValue(percent)
+        label:SetText(("Text and window size: %d%%"):format(percent + 0.5))
+    end
+    slider:SetScript("OnValueChanged", function(_, value)
+        ShowValue(value)
+        ns.ApplyWindowScale(value / 100)
+    end)
+
+    local note = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    note:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", -4, -24)
+    note:SetWidth(420)
+    note:SetJustifyH("LEFT")
+    note:SetText("Scales the whole writ table, so bigger text still fits its columns. "
+        .. "Also: the A- / A+ buttons in the window's title bar, or /wledger size 80-150.")
+
+    panel:SetScript("OnShow", function()
+        local percent = ns.WindowScale() * 100
+        ShowValue(percent)
+        slider:SetValue(percent)
+    end)
+    settingsSlider = slider
+
+    if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
+        local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
+        Settings.RegisterAddOnCategory(category)
+    elseif InterfaceOptions_AddCategory then
+        InterfaceOptions_AddCategory(panel)
+    end
+end
+
+local okPanel = pcall(CreateSettingsPanel)
+if not okPanel then settingsSlider = nil end
 
 -- Turn-in map pin ---------------------------------------------------------------
 
@@ -871,18 +992,149 @@ local function AuctionFrame()
     return AuctionHouseFrame or AuctionFrame
 end
 
+local WRIT_ICON_ITEM = 264019 -- any Craftsman's Writ: its scroll icon
+local FALLBACK_ICON = "Interface\\Icons\\INV_Scroll_03"
+
+local function WritIcon()
+    local getIcon = (C_Item and C_Item.GetItemIconByID) or GetItemIcon
+    if getIcon then
+        local ok, icon = pcall(getIcon, WRIT_ICON_ITEM)
+        if ok and icon then return icon end
+    end
+    return FALLBACK_ICON
+end
+
+local TAB_TEMPLATES = { "AuctionHouseFrameDisplayModeTabTemplate", "AuctionTabTemplate" }
+local ICON_SIZE, ICON_GAP, TAB_PADDING, TAB_MIN_WIDTH = 16, 4, 20, 70
+
+-- Mirrors a texture top-to-bottom (the tab art is drawn hanging down).
+local function FlipVertical(texture)
+    local ok, ulx, uly, llx, lly, urx, ury, lrx, lry = pcall(texture.GetTexCoord, texture)
+    if ok and ulx then texture:SetTexCoord(llx, lly, ulx, uly, lrx, lry, urx, ury) end
+end
+
+local MIRRORED = { TOP = "BOTTOM", BOTTOM = "TOP", TOPLEFT = "BOTTOMLEFT", BOTTOMLEFT = "TOPLEFT",
+    TOPRIGHT = "BOTTOMRIGHT", BOTTOMRIGHT = "TOPRIGHT" }
+
+-- Moves a region's anchors to the mirrored side (for the tab's label).
+local function MirrorAnchors(region)
+    local points = {}
+    for index = 1, region:GetNumPoints() do points[index] = { region:GetPoint(index) } end
+    region:ClearAllPoints()
+    for _, p in ipairs(points) do
+        region:SetPoint(MIRRORED[p[1]] or p[1], p[2], MIRRORED[p[3]] or p[3], p[4], -(p[5] or 0))
+    end
+end
+
+-- Width for the label plus the icon, like Auctionator's own tabs.
+local function FitTab(tab)
+    local label = tab:GetFontString()
+    if not label then return end
+    local width = math.ceil(label:GetStringWidth()) + ICON_SIZE + ICON_GAP + TAB_PADDING * 2
+    tab:SetWidth(math.max(TAB_MIN_WIDTH, width))
+end
+
+-- A grey Auction House tab, like Auctionator's tabs at the bottom, flipped to
+-- stand on top of the window. Nil if this client has no such tab template.
+local function CreateAHTab(ahFrame)
+    local tab
+    for _, template in ipairs(TAB_TEMPLATES) do
+        local ok, created = pcall(CreateFrame, "Button", "WritsLedgerAHTab", ahFrame, template)
+        if ok and created then
+            tab = created
+            break
+        end
+    end
+    if not tab then return nil end
+    tab:SetText("Writs Ledger")
+    if PanelTemplates_DeselectTab then pcall(PanelTemplates_DeselectTab, tab) end -- grey, unselected look
+
+    -- Flip every texture once (the highlight can be both a region and the
+    -- button's highlight texture; flipping it twice would undo it).
+    local flipped = {}
+    local function Flip(texture)
+        if texture and not flipped[texture] then
+            flipped[texture] = true
+            FlipVertical(texture)
+        end
+    end
+    for _, region in ipairs({ tab:GetRegions() }) do
+        if region:IsObjectType("Texture") then Flip(region) end
+    end
+    for _, getter in ipairs({ "GetHighlightTexture", "GetNormalTexture", "GetPushedTexture" }) do
+        if tab[getter] then Flip(tab[getter](tab)) end
+    end
+
+    local label = tab:GetFontString()
+    local icon = tab:CreateTexture(nil, "OVERLAY")
+    icon:SetSize(ICON_SIZE, ICON_SIZE)
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) -- trim the icon border
+    if label then
+        MirrorAnchors(label)
+        -- Shift the label right to make room for the icon.
+        local point, relative, relativePoint, x, y = label:GetPoint(1)
+        label:SetPoint(point, relative, relativePoint, (x or 0) + (ICON_SIZE + ICON_GAP) / 2, y or 0)
+        icon:SetPoint("RIGHT", label, "LEFT", -ICON_GAP, 0)
+    else
+        icon:SetPoint("LEFT", TAB_PADDING, 0)
+    end
+    tab.icon = icon
+    FitTab(tab)
+    -- The template resizes tabs when shown; keep room for the icon.
+    tab:HookScript("OnShow", FitTab)
+    tab:SetScript("OnClick", function() ns.ToggleWindow() end)
+    SetSimpleTooltip(tab, "Writs Ledger", "Open the Craftsman's Writs table (also /wledger).")
+    tab.isTab = true
+    return tab
+end
+
+-- Fallback: a standard button, same style and height as Auctionator's.
+local function CreateAHButton()
+    local ok, button = pcall(CreateFrame, "Button", nil, UIParent, "UIPanelDynamicResizeButtonTemplate")
+    if not ok or not button then button = CreateFrame("Button", nil, UIParent, "UIPanelButtonTemplate") end
+    button:SetHeight(22)
+    button:SetText("Writs Ledger")
+    button:SetScript("OnClick", function() ns.ToggleWindow() end)
+
+    local label = button:GetFontString()
+    local icon = button:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(ICON_SIZE, ICON_SIZE)
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    if label then
+        label:ClearAllPoints()
+        label:SetPoint("CENTER", button, "CENTER", (ICON_SIZE + ICON_GAP) / 2, 0)
+        icon:SetPoint("RIGHT", label, "LEFT", -ICON_GAP, 0)
+        button:SetWidth(math.ceil(label:GetStringWidth()) + ICON_SIZE + ICON_GAP + 28)
+    else
+        icon:SetPoint("LEFT", 8, 0)
+        button:SetWidth(120)
+    end
+    button.icon = icon
+    SetSimpleTooltip(button, "Writs Ledger", "Open the Craftsman's Writs table (also /wledger).")
+    return button
+end
+
 function ns.ShowAHButton()
     local ahFrame = AuctionFrame()
+    local attached = ahFrame and ahFrame:IsShown()
     if not ahButton then
-        ahButton = CreateButton(UIParent, "Writs", 70, function() ns.ToggleWindow() end)
-        ahButton:SetFrameStrata("HIGH")
-        SetSimpleTooltip(ahButton, "Craftsman's Writs", "Open the writ table (also /wledger).")
+        ahButton = attached and CreateAHTab(ahFrame) or CreateAHButton()
     end
+    ahButton.icon:SetTexture(WritIcon()) -- the item icon may only load later
     ahButton:ClearAllPoints()
-    if ahFrame and ahFrame:IsShown() then
-        ahButton:SetPoint("BOTTOMRIGHT", ahFrame, "TOPRIGHT", -24, 2)
+    if attached then
+        -- On top of the Auction House window, near its right edge; it moves,
+        -- scales and hides with the window. A tab tucks under the top border
+        -- the way the bottom tabs tuck under the bottom one.
+        ahButton:SetParent(ahFrame)
+        ahButton:SetFrameStrata(ahFrame:GetFrameStrata())
+        ahButton:SetFrameLevel(ahButton.isTab and math.max(1, ahFrame:GetFrameLevel() - 1) or ahFrame:GetFrameLevel() + 10)
+        ahButton:SetPoint("BOTTOMRIGHT", ahFrame, "TOPRIGHT", -24, ahButton.isTab and -4 or 0)
+        if ahButton.isTab then FitTab(ahButton) end
     else
         -- Unknown Auction House frame on this client: top centre of the screen.
+        ahButton:SetParent(UIParent)
+        ahButton:SetFrameStrata("HIGH")
         ahButton:SetPoint("TOP", UIParent, "TOP", 0, -8)
     end
     ahButton:Show()
@@ -901,9 +1153,15 @@ SLASH_WRITSLEDGER2 = "/writsledger"
 SLASH_WRITSLEDGER3 = "/awrits" -- name before 0.2.0
 SlashCmdList.WRITSLEDGER = function(message)
     local command = strtrim(message or ""):lower()
+    local size = command:match("^size%s*(%d+)")
     if command == "learn" then
         ns.LearnNow()
         ns.Report("re-read your bags and quest log.")
+    elseif size then
+        local scale = ns.ApplyWindowScale(tonumber(size) / 100)
+        ns.Report(("window size %d%%."):format(scale * 100 + 0.5))
+    elseif command == "size" then
+        ns.Report(("window size is %d%%. Change it with /wledger size 80-150."):format(ns.WindowScale() * 100 + 0.5))
     else
         ns.ToggleWindow()
     end

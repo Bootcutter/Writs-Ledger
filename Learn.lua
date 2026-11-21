@@ -287,8 +287,13 @@ local function LearnTurnIns()
         local item = title:sub(#PREFIX + 1)
         ns.AddWrit(item)
         local learned = ns.Learned(item, true)
-        if learned.turnIn then return end
         local entry = ns.writsByItem[item]
+        -- Remember the quest ID when Data.lua has none or a different one,
+        -- so turn-ins and the daily check find this writ.
+        if entry and entry.quest ~= questID and learned.quest ~= questID then
+            learned.quest = questID
+        end
+        if learned.turnIn then return end
         local expected = entry and entry.turnIn and entry.turnIn.mapID
         local mapID, x, y = FindQuestLocation(questID, expected)
         if mapID and x and y then
@@ -347,6 +352,23 @@ TryRegister("GET_ITEM_INFO_RECEIVED")
 TryRegister("QUEST_DETAIL")
 TryRegister("QUEST_ACCEPTED")
 TryRegister("QUEST_LOG_UPDATE")
+TryRegister("QUEST_TURNED_IN")
+
+-- A writ was turned in: mark it done for today on this character.
+local function OnQuestTurnedIn(questID)
+    questID = Plain(questID)
+    local entry = ns.EntryForQuest(questID)
+    if not entry and type(questID) == "number" and C_QuestLog and C_QuestLog.GetTitleForQuestID then
+        local ok, title = pcall(C_QuestLog.GetTitleForQuestID, questID)
+        title = ok and Plain(title)
+        if type(title) == "string" and title:sub(1, #PREFIX) == PREFIX then
+            entry = ns.writsByItem[title:sub(#PREFIX + 1)]
+        end
+    end
+    if not entry then return end
+    ns.MarkTurnedIn(entry.item)
+    changed = true
+end
 
 events:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
@@ -389,6 +411,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "QUEST_LOG_UPDATE" then
         QueueQuestLogScan(5)
         return
+    elseif event == "QUEST_TURNED_IN" then
+        OnQuestTurnedIn(arg1)
     end
     Flush()
 end)

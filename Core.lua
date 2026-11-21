@@ -135,13 +135,70 @@ function ns.ZoneName(turnIn)
     return info and info.name or "?"
 end
 
--- True when this writ's daily quest was already done today (nil if unknown).
-function ns.DoneToday(entry)
-    if not entry.quest then return nil end
+-- Daily turn-ins ---------------------------------------------------------------
+
+local function CharacterKey()
+    local name = UnitName("player")
+    local realm = GetRealmName and GetRealmName() or ""
+    return name and (name .. "-" .. realm) or nil
+end
+
+-- Time of the last daily reset, or nil when the client does not say.
+local function LastDailyReset()
+    local untilReset
+    if C_DateAndTime and C_DateAndTime.GetSecondsUntilDailyReset then
+        local ok, seconds = pcall(C_DateAndTime.GetSecondsUntilDailyReset)
+        if ok then untilReset = seconds end
+    end
+    if type(untilReset) ~= "number" and GetQuestResetTime then
+        local ok, seconds = pcall(GetQuestResetTime)
+        if ok then untilReset = seconds end
+    end
+    if type(untilReset) ~= "number" or untilReset <= 0 then return nil end
+    return time() + untilReset - 86400
+end
+
+-- Remembers that this character turned in the writ for `item` just now.
+function ns.MarkTurnedIn(item)
+    local key = CharacterKey()
+    if not db or not key or not item then return end
+    db.turnedIn = type(db.turnedIn) == "table" and db.turnedIn or {}
+    db.turnedIn[key] = type(db.turnedIn[key]) == "table" and db.turnedIn[key] or {}
+    db.turnedIn[key][item] = time()
+end
+
+local function TurnedInToday(item)
+    local key = CharacterKey()
+    local byChar = db and type(db.turnedIn) == "table" and key and db.turnedIn[key]
+    local at = type(byChar) == "table" and byChar[item]
+    if type(at) ~= "number" then return false end
+    local reset = LastDailyReset() or (time() - 86400)
+    return at >= reset
+end
+
+local function QuestFlagged(questID)
+    if type(questID) ~= "number" then return nil end
     local check = (C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted) or IsQuestFlaggedCompleted
     if not check then return nil end
-    local ok, done = pcall(check, entry.quest)
+    local ok, done = pcall(check, questID)
     if ok and type(done) == "boolean" then return done end
+end
+
+-- True when this character already turned in this writ today: the game's
+-- daily completion flag, or a turn-in this addon saw since the daily reset.
+function ns.DoneToday(entry)
+    if TurnedInToday(entry.item) then return true end
+    local learned = ns.Learned(entry.item)
+    return QuestFlagged(entry.quest) or QuestFlagged(learned and learned.quest) or false
+end
+
+-- The writ entry whose quest has this ID, or nil.
+function ns.EntryForQuest(questID)
+    if type(questID) ~= "number" then return nil end
+    for _, entry in ipairs(ns.writs) do
+        local learned = ns.Learned(entry.item)
+        if entry.quest == questID or (learned and learned.quest == questID) then return entry end
+    end
 end
 
 -- Continent of a map (Kalimdor, Eastern Kingdoms, ...): walk up the map
@@ -252,6 +309,24 @@ end
 -- Buying and scanning (Auctionator's Shopping tab) -----------------------------
 
 -- Clicking a turn-in opens the world map (true) or only sets a waypoint.
+-- Window size (text and all), 0.8-1.5; saved account-wide.
+ns.SCALE_MIN, ns.SCALE_MAX, ns.SCALE_STEP = 0.8, 1.5, 0.05
+
+function ns.WindowScale()
+    local scale = db and tonumber(db.scale)
+    if not scale then return 1 end
+    return math.min(ns.SCALE_MAX, math.max(ns.SCALE_MIN, scale))
+end
+
+-- Stores the size (rounded to a step, clamped) and returns it.
+function ns.SetWindowScale(value)
+    value = tonumber(value) or 1
+    value = math.floor(value / ns.SCALE_STEP + 0.5) * ns.SCALE_STEP
+    value = math.min(ns.SCALE_MAX, math.max(ns.SCALE_MIN, value))
+    if db then db.scale = value end
+    return value
+end
+
 function ns.OpenMapOnClick()
     return not db or db.openMap ~= false
 end
