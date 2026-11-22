@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3
+
+- Packaging: the addon's TOC file is now named WritsLedger.toc so CurseForge accepts the upload. No gameplay changes.
+
 ## 0.2.2
 
 - Writs you turned in today get a green check in the Have column, and their name is dimmed. Turn-ins are also remembered per character until the daily reset, so the check shows even when the game's completion flag does not.
