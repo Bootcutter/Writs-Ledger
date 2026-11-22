@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4
+
+- The zone filter now lists Kalimdor on the left and Eastern Kingdoms on the right, as on the world map.
+- The tier colours are explained: the tier boxes read "Writ tier (rep per turn-in): Journeyman (75), Expert (125), Artisan (200)", hovering one explains it, and each writ's tooltip shows its reputation.
+- Fixed: characters whose names share a prefix (for example Lil-Bolty and Lil-Stormy) shared one "turned in today" list. Each character now has its own.
+
 ## 0.2.3
 
 - Packaging: the addon's TOC file is now named WritsLedger.toc so CurseForge accepts the upload. No gameplay changes.

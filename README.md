@@ -8,7 +8,7 @@ Writs Ledger lists all 150 Craftsman's Writs. Each row shows the writ's tier, it
 
 ## Features
 
-- **All writs in one table.** Names are coloured by tier: Apprentice, Journeyman, Expert and Artisan.
+- **All writs in one table.** Names are coloured by tier, and the tier sets the reputation a turn-in gives: Journeyman (green) 75, Expert (blue) 125, Artisan (purple) 200, before the Legacy perk Diplomat. The tier boxes above the table double as the legend.
 - **Prices from Auctionator.** The table shows the price of the writ, of the requested item, and of both together. Prices come from Auctionator's saved data, so the table works anywhere, even away from the Auction House. Prices older than today are grey and show their age in days.
 - **One-click shopping.** At the Auction House, **Buy** (writ), **Buy** (item) and **Both** open Auctionator's Shopping tab with an exact search. You still click to buy every item yourself.
 - **Full Scan button.** Starts Auctionator's own full scan from the table. The table updates when the scan finishes.

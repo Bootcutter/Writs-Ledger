@@ -22,6 +22,9 @@ ns.TIER_COLORS = {
     Artisan    = { 0.78, 0.40, 1.00 },
 }
 ns.UNKNOWN_COLOR = { 0.6, 0.6, 0.6 }
+-- Base reputation per turn-in, before the Legacy perk Diplomat (+2% per rank,
+-- up to +10%). Numbers from Craftman's Helper.
+ns.TIER_REP = { Journeyman = 75, Expert = 125, Artisan = 200 }
 
 function ns.IsSecret(value)
     return type(issecretvalue) == "function" and issecretvalue(value)
@@ -137,7 +140,11 @@ end
 
 -- Daily turn-ins ---------------------------------------------------------------
 
+-- Keyed by the character's GUID: on Forever, UnitName/GetRealmName gave "Lil-"
+-- for every "Lil-..." character, so alts shared one list.
 local function CharacterKey()
+    local guid = UnitGUID and UnitGUID("player")
+    if type(guid) == "string" and not ns.IsSecret(guid) and guid ~= "" then return guid end
     local name = UnitName("player")
     local realm = GetRealmName and GetRealmName() or ""
     return name and (name .. "-" .. realm) or nil

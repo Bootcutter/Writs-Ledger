@@ -65,7 +65,8 @@ end
 
 -- Turn-in zones grouped by continent, for the zone dropdown:
 -- { { name = continent, zones = { { name = zone, count = writs }, ... } }, ... }
--- sorted by name, with a "Not learned yet" group (zone "Unknown") last.
+-- Kalimdor first, then Eastern Kingdoms, with a "Not learned yet" group
+-- (zone "Unknown") last.
 local function ZoneGroups()
     local groups, byName, counts = {}, {}, {}
     for _, entry in ipairs(ns.writs) do
@@ -83,7 +84,19 @@ local function ZoneGroups()
         end
         counts[zone] = counts[zone] + 1
     end
-    table.sort(groups, function(a, b) return a.name < b.name end)
+    -- Map order, west to east: Kalimdor, then Eastern Kingdoms, then any other
+    -- continent by name, and "Not learned yet" ("~") last.
+    local rank = {}
+    for i, mapID in ipairs({ 1414, 1415 }) do -- Kalimdor, Eastern Kingdoms
+        local info = C_Map.GetMapInfo(mapID)
+        if info and info.name then rank[info.name] = i end
+    end
+    local function Rank(name) return name == "~" and 99 or rank[name] or 50 end
+    table.sort(groups, function(a, b)
+        local ra, rb = Rank(a.name), Rank(b.name)
+        if ra ~= rb then return ra < rb end
+        return a.name < b.name
+    end)
     for _, group in ipairs(groups) do
         if group.name == "~" then group.name = "Not learned yet" end
         table.sort(group.zones, function(a, b) return a.name < b.name end)
@@ -283,7 +296,9 @@ local function ShowRowTooltip(row)
     local tier = ns.Tier(entry)
     local r, g, b = unpack(ns.TierColor(tier))
     GameTooltip:SetText(ns.WritName(entry), r, g, b)
-    GameTooltip:AddLine((tier or "Unknown tier") .. " - " .. (ns.Profession(entry) or "unknown profession"), 1, 1, 1)
+    local rep = ns.TIER_REP[tier or ""]
+    GameTooltip:AddLine((tier and (tier .. " writ") or "Unknown tier") .. " - " .. (ns.Profession(entry) or "unknown profession"), 1, 1, 1)
+    if rep then GameTooltip:AddLine(("%d reputation per turn-in"):format(rep), r, g, b) end
     local count, known = ns.Count(entry)
     GameTooltip:AddLine(known and ("Requests %d %s"):format(count, entry.item)
         or ("Requests %s (count not seen yet; right-click the writ to learn it)"):format(entry.item), 1, 1, 1, true)
@@ -622,6 +637,12 @@ local function CreateWindow()
     -- Filter bar ---------------------------------------------------------------
     local x = 14
     tierButtons = {}
+    -- The tier boxes double as the colour legend: a writ's name colour is its
+    -- tier, and the tier sets the reputation it gives.
+    local tierLegend = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    tierLegend:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -36)
+    tierLegend:SetText("Writ tier (rep per turn-in):")
+    x = x + tierLegend:GetStringWidth() + 8
     -- No Apprentice or Unknown box: no writ has those tiers, so they filtered
     -- nothing. Such writs still show (state.tiers keeps them on).
     for _, tier in ipairs({ "Journeyman", "Expert", "Artisan" }) do
@@ -637,8 +658,12 @@ local function CreateWindow()
         box:SetColorTexture(0, 0, 0, 0.5)
         button.label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         button.label:SetPoint("LEFT", 18, 0)
-        button.label:SetText(tier)
+        button.label:SetText(("%s (%d)"):format(tier, ns.TIER_REP[tier]))
         button:SetWidth(button.label:GetStringWidth() + 26)
+        SetSimpleTooltip(button, tier .. " writs",
+            ("Writs with names in this colour are %s writs. Each turn-in gives %d reputation "
+                .. "(up to 10%% more with the Legacy perk Diplomat). Click to show or hide them.")
+                :format(tier, ns.TIER_REP[tier]))
         button:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -32)
         x = x + button:GetWidth() + 4
         button:SetScript("OnClick", function()
