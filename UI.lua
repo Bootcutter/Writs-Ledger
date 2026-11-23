@@ -228,12 +228,17 @@ local function DrawRow(row, entry)
     -- The total is only as fresh as its older part.
     row.cells.total:SetText(PriceText(total, total and math.max(writAge or 0, itemAge or 0) or nil))
 
-    for _, button in ipairs(row.buy) do button:SetEnabled(ns.ahOpen) end
+    local canBuy = ns.ahOpen and not ns.AuctionatorScanning()
+    for _, button in ipairs(row.buy) do button:SetEnabled(canBuy) end
     row:Show()
 end
 
 -- Defined before DrawRows, which calls it (a local is only visible below it).
 local function LastScanText()
+    local progress = ns.ScanProgress()
+    if progress then
+        return ("|cffffd100Auctionator scanning... %d%%|r"):format(math.floor(progress * 100 + 0.5))
+    end
     local last = ns.LastScan()
     if not last then return "Last scan: never" end
     local seconds = math.max(0, time() - last)
@@ -258,9 +263,14 @@ local function DrawRows()
         local _, _, total = ns.Prices(entry)
         if total then priced = priced + 1 end
     end
-    local where = ns.ahOpen and "" or "  |cffff8080Open the Auction House to buy or scan.|r"
+    local where = ""
+    if not ns.ahOpen then
+        where = "  |cffff8080Open the Auction House to buy or scan.|r"
+    elseif ns.AuctionatorScanning() then
+        where = "  |cffffd100Buy is paused until Auctionator's scan finishes.|r"
+    end
     statusText:SetText(("%d writs shown, %d with full prices.%s"):format(#list, priced, where))
-    scanButton:SetEnabled(ns.ahOpen)
+    scanButton:SetEnabled(ns.ahOpen and not ns.AuctionatorScanning())
     lastScanText:SetText(LastScanText())
 end
 
@@ -279,6 +289,11 @@ local function RefreshTierButtons()
         label = count == 0 and "None" or count == 1 and picked or (count .. " selected")
     end
     zoneButton:SetText("Zones: " .. label)
+end
+
+-- Only the scan text at the top (cheap; called on every scan progress step).
+function ns.RefreshScanStatus()
+    if ns.WindowShown() and lastScanText then lastScanText:SetText(LastScanText()) end
 end
 
 function ns.RefreshWindow()
@@ -1013,8 +1028,10 @@ end
 
 -- Auction House button ------------------------------------------------------------
 
-local function AuctionFrame()
-    return AuctionHouseFrame or AuctionFrame
+-- Named so it does not shadow the global AuctionFrame (the legacy AH window):
+-- inside "local function AuctionFrame", that name would be this function.
+local function AHWindow()
+    return _G.AuctionHouseFrame or _G.AuctionFrame
 end
 
 local WRIT_ICON_ITEM = 264019 -- any Craftsman's Writ: its scroll icon
@@ -1059,18 +1076,82 @@ local function CreateAHButton()
     return button
 end
 
+-- Other addons also put buttons on top of the Auction House window. Find the
+-- ones sitting in that strip (children of the AH window or of UIParent) as
+-- horizontal spans in screen units, so ours can queue up beside them.
+local SLOT_START, SLOT_GAP = 6, 4
+
+local function CollectStripSpans(ahFrame, ahScale, ahTop, height, spans, ...)
+    for index = 1, select("#", ...) do
+        local frame = select(index, ...)
+        if frame ~= ahButton and frame ~= ahFrame then
+            pcall(function()
+                if not frame:IsVisible() then return end
+                local left, right, bottom, top = frame:GetLeft(), frame:GetRight(), frame:GetBottom(), frame:GetTop()
+                if not (left and right and bottom and top) then return end
+                local scale = frame:GetEffectiveScale()
+                left, right, bottom, top = left * scale, right * scale, bottom * scale, top * scale
+                -- Sits on the AH top edge (not inside the window) and is button-sized.
+                if bottom >= ahTop - 4 * ahScale and bottom < ahTop + height
+                    and top - bottom < 60 * ahScale and right - left < 400 * ahScale then
+                    spans[#spans + 1] = { left = left, right = right }
+                end
+            end)
+        end
+    end
+end
+
+-- Distance (in AH units) from the AH's right edge to the right edge of the
+-- first free slot, walking leftwards, that is wide enough for our button.
+local function FreeSlotOffset(ahFrame)
+    local ahScale = ahFrame:GetEffectiveScale()
+    local ahLeft, ahRight, ahTop = ahFrame:GetLeft(), ahFrame:GetRight(), ahFrame:GetTop()
+    if not (ahLeft and ahRight and ahTop) then return SLOT_START end
+    ahLeft, ahRight, ahTop = ahLeft * ahScale, ahRight * ahScale, ahTop * ahScale
+    local width = ahButton:GetWidth() * ahScale
+    local gap = SLOT_GAP * ahScale
+
+    local spans = {}
+    local height = ahButton:GetHeight() * ahScale
+    CollectStripSpans(ahFrame, ahScale, ahTop, height, spans, ahFrame:GetChildren())
+    CollectStripSpans(ahFrame, ahScale, ahTop, height, spans, UIParent:GetChildren())
+    table.sort(spans, function(a, b) return a.right > b.right end)
+
+    local x = ahRight - SLOT_START * ahScale -- our right edge
+    for _, span in ipairs(spans) do
+        if span.left - gap < x and span.right + gap > x - width then
+            x = span.left - gap
+        end
+    end
+    if x - width < ahLeft then return SLOT_START end -- no room: keep the default spot
+    return (ahRight - x) / ahScale
+end
+
+local function PlaceOnAuctionHouse(ahFrame)
+    if not (ahButton and ahButton:IsShown() and ahFrame:IsShown()) then return end
+    if ahButton:GetParent() ~= ahFrame then return end
+    local ok, offset = pcall(FreeSlotOffset, ahFrame)
+    ahButton:ClearAllPoints()
+    ahButton:SetPoint("BOTTOMRIGHT", ahFrame, "TOPRIGHT", -(ok and offset or SLOT_START), 0)
+end
+
 function ns.ShowAHButton()
-    local ahFrame = AuctionFrame()
+    local ahFrame = AHWindow()
     if not ahButton then ahButton = CreateAHButton() end
     ahButton.icon:SetTexture(WritIcon()) -- the item icon may only load later
     ahButton:ClearAllPoints()
     if ahFrame and ahFrame:IsShown() then
-        -- On top of the Auction House window, flush with its right edge; it
-        -- moves, scales and hides with the window.
+        -- On top of the Auction House window at its right edge, queued to the
+        -- left of any other addon's button already there; it moves, scales
+        -- and hides with the window.
         ahButton:SetParent(ahFrame)
         ahButton:SetFrameStrata(ahFrame:GetFrameStrata())
         ahButton:SetFrameLevel(ahFrame:GetFrameLevel() + 10)
-        ahButton:SetPoint("BOTTOMRIGHT", ahFrame, "TOPRIGHT", -6, 0)
+        ahButton:SetPoint("BOTTOMRIGHT", ahFrame, "TOPRIGHT", -SLOT_START, 0)
+        -- Other addons may add their buttons in the same frame or a moment
+        -- later, so look for free space after they have had their turn.
+        C_Timer.After(0, function() PlaceOnAuctionHouse(ahFrame) end)
+        C_Timer.After(0.5, function() PlaceOnAuctionHouse(ahFrame) end)
     else
         -- Unknown Auction House frame on this client: top centre of the screen.
         ahButton:SetParent(UIParent)

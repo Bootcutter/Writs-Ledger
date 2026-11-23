@@ -11,7 +11,7 @@ Writs Ledger lists all 150 Craftsman's Writs. Each row shows the writ's tier, it
 - **All writs in one table.** Names are coloured by tier, and the tier sets the reputation a turn-in gives: Journeyman (green) 75, Expert (blue) 125, Artisan (purple) 200, before the Legacy perk Diplomat. The tier boxes above the table double as the legend.
 - **Prices from Auctionator.** The table shows the price of the writ, of the requested item, and of both together. Prices come from Auctionator's saved data, so the table works anywhere, even away from the Auction House. Prices older than today are grey and show their age in days.
 - **One-click shopping.** At the Auction House, **Buy** (writ), **Buy** (item) and **Both** open Auctionator's Shopping tab with an exact search. You still click to buy every item yourself.
-- **Full Scan button.** Starts Auctionator's own full scan from the table. The table updates when the scan finishes.
+- **Full Scan button.** Starts Auctionator's own full scan from the table and shows its progress ("Auctionator scanning... 42%"). While any Auctionator scan runs, the Buy buttons are paused so a search can't cut the scan short. The table updates when the scan finishes.
 - **Turn-in points.** Shows the zone and coordinates for 111 writs from the start. Click the zone to open the world map with a waypoint on the spot. Turn-in points for the rest are learned when you accept those writs.
 - **Filters and sorting.** Filter by tier, profession, turn-in zone (grouped by continent), "Only what I have" and name search. Click a column header to sort.
 - **Your progress.** Shows which writs and items are in your bags, and puts a green check on writs this character has already turned in today.
@@ -40,7 +40,9 @@ Writs Ledger lists all 150 Craftsman's Writs. Each row shows the writ's tier, it
 - The full scan has a **15-minute server cooldown**. Auctionator tells you in chat when the next scan is possible.
 - In the Turn-in column, **white** means your own quest log confirmed the spot. **Pale** means the spot comes from the built-in data. The row's tooltip names the NPC.
 - Writs that are not in the built-in data are added when you see them in your bags or in Auction House results.
-- Writs Ledger uses only Auctionator's public API, and never buys anything without your click.
+- Writs Ledger reads prices through Auctionator's public API (plus its scan events, for the progress display), and never buys anything without your click.
+- "Last scan" is kept separately for each Auctionator price database, so Horde and Alliance each show their own.
+- If another addon already has a button at the top right of the Auction House window, the Writs Ledger button sits to its left.
 - Settings and learned data are saved account-wide.
 
 ## Bugs and feedback

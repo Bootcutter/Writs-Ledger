@@ -63,6 +63,9 @@ function ns.InitializeDatabase()
     db.ids = type(db.ids) == "table" and db.ids or {}
     db.writs = type(db.writs) == "table" and db.writs or {}
     if db.openMap == nil then db.openMap = true end -- click a turn-in: open the map
+    -- Before 0.2.5 one "last scan" time was shared by every realm and faction,
+    -- and any AH search counted as a scan; now it is kept per price database.
+    db.lastScan = nil
     for _, seed in ipairs(ns.SeedWrits or {}) do AddWrit(seed) end
     -- Writs learned in-game that the seed list does not have.
     for item in pairs(db.writs) do AddWrit(item) end
@@ -342,9 +345,40 @@ function ns.SetOpenMapOnClick(value)
     if db then db.openMap = value and true or false end
 end
 
--- Time (from time()) Auctionator last finished a scan, or nil.
+-- Auctionator keeps one price database per AH (on Forever: ruleset + faction,
+-- e.g. "PvE Horde") and picks it for the character you log in with. Scan
+-- times are kept under the same key, so a Horde scan never shows as recent on
+-- an Alliance character.
+local function PriceDatabaseKey()
+    local state = Auctionator and Auctionator.State
+    local key = state and state.CurrentRealm
+    if type(key) == "string" and key ~= "" then return key end
+    return (GetRealmName and GetRealmName() or "?") .. " " .. (UnitFactionGroup and UnitFactionGroup("player") or "?")
+end
+
+-- Time (from time()) Auctionator last finished a scan of this AH, or nil.
 function ns.LastScan()
-    return db and db.lastScan
+    if not db or type(db.lastScans) ~= "table" then return nil end
+    return db.lastScans[PriceDatabaseKey()]
+end
+
+-- True while Auctionator's own scan is running. An AH search started then
+-- (by the Buy buttons, or anyone) replaces the scan's results, and the scan
+-- ends with "Finished processing 0 items".
+function ns.AuctionatorScanning()
+    local state = Auctionator and Auctionator.State
+    if not state then return false end
+    local summary, replicate = state.IncrementalScanFrameRef, state.FullScanFrameRef
+    return (summary and summary.doingFullScan == true) or (replicate and replicate.inProgress == true) or false
+end
+
+-- Auctionator's scan progress, 0-1, while it scans; nil otherwise.
+function ns.ScanProgress()
+    if not ns.AuctionatorScanning() then
+        ns.scanProgress = nil
+        return nil
+    end
+    return ns.scanProgress or 0
 end
 
 local function Report(message)
@@ -358,6 +392,10 @@ function ns.Buy(names)
     local api = API()
     if not ns.ahOpen then
         Report("open the Auction House to buy.")
+        return
+    end
+    if ns.AuctionatorScanning() then
+        Report("Auctionator is still scanning. Buy when it says \"Finished processing\"; a search now would cut the scan short.")
         return
     end
     if not api or not api.MultiSearchExact then
@@ -392,13 +430,59 @@ function ns.Scan()
     Report("could not start Auctionator's full scan. Use the Scan button on Auctionator's tab.")
 end
 
--- Records when Auctionator last finished a scan and redraws the window, so
--- new prices show without reopening it. Covers scans started from Auctionator.
+-- Redraws the window when Auctionator's prices change, so they show without
+-- reopening it. Auctionator also records prices from every AH search (not
+-- only scans), so its public update callback cannot tell a scan apart. Scan
+-- state ("scanning 42%", "Last scan") instead comes from Auctionator's scan
+-- events (internal, guarded: if they change, the window only loses the
+-- progress text and the "Last scan" time; ns.AuctionatorScanning still
+-- greys out the buttons during a scan).
 function ns.RegisterPriceUpdates()
     local api = API()
-    if not api or not api.RegisterForDBUpdate then return end
-    pcall(api.RegisterForDBUpdate, CALLER, function()
-        if db then db.lastScan = time() end
-        if ns.RefreshWindow then ns.RefreshWindow() end
-    end)
+    if api and api.RegisterForDBUpdate then
+        pcall(api.RegisterForDBUpdate, CALLER, function()
+            if ns.RefreshWindow then ns.RefreshWindow() end
+        end)
+    end
+
+    local bus = Auctionator and Auctionator.EventBus
+    if not bus or type(bus.Register) ~= "function" then return end
+    local kinds, events = {}, {}
+    for _, name in ipairs({ "IncrementalScan", "FullScan" }) do -- summary and replicate scans
+        local group = Auctionator[name]
+        local names = type(group) == "table" and type(group.Events) == "table" and group.Events
+        if names then
+            for _, kind in ipairs({ "ScanStart", "ScanProgress", "ScanComplete", "ScanFailed" }) do
+                if type(names[kind]) == "string" then
+                    kinds[names[kind]] = kind
+                    events[#events + 1] = names[kind]
+                end
+            end
+        end
+    end
+    if #events == 0 then return end
+    pcall(bus.Register, bus, {
+        ReceiveEvent = function(_, eventName, progress)
+            local kind = kinds[eventName]
+            if kind == "ScanStart" then
+                ns.scanProgress = 0
+            elseif kind == "ScanProgress" then
+                ns.scanProgress = type(progress) == "number" and progress or ns.scanProgress or 0
+            elseif kind == "ScanComplete" then
+                ns.scanProgress = nil
+                if db then
+                    db.lastScans = type(db.lastScans) == "table" and db.lastScans or {}
+                    db.lastScans[PriceDatabaseKey()] = time()
+                end
+            elseif kind == "ScanFailed" then
+                ns.scanProgress = nil
+            end
+            -- Progress fires often during a scan: only redraw the percentage.
+            if kind == "ScanProgress" then
+                if ns.RefreshScanStatus then ns.RefreshScanStatus() end
+            elseif ns.RefreshWindow then
+                ns.RefreshWindow()
+            end
+        end,
+    }, events)
 end

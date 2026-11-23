@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.5
+
+- While Auctionator scans, the Buy and Full Scan buttons are greyed out and the window shows "Auctionator scanning... N%". A search during the scan cut it short ("Finished processing 0 items").
+- "Last scan" now counts only finished Auctionator scans (not every Auction House search) and is kept per Auctionator price database, so each faction has its own.
+- The Writs Ledger button on the Auction House moves left of another addon's button instead of covering it.
+- Fixed: the turn-in NPCs "Plucky" Johnson and "Sea Wolf" MacKinley showed stray backslashes in the tooltip.
+- Fixed a possible error on clients with the old-style Auction House window.
+
 ## 0.2.4
 
 - The zone filter now lists Kalimdor on the left and Eastern Kingdoms on the right, as on the world map.
