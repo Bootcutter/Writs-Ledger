@@ -31,6 +31,7 @@ Writs Ledger lists all 150 Craftsman's Writs. Each row shows the writ's tier, it
 |---|---|
 | `/wledger` | Opens or closes the table. `/writsledger` and the old `/awrits` work too. |
 | `/wledger learn` | Reads your bags and quest log again. |
+| `/wledger lastbuy` | Shows the last Auction House purchase line and how it was read (for bug reports). |
 | `/wledger size 120` | Sets the text and window size, from 80 to 150%. Also in **Options > AddOns > Writs Ledger** and with the **A- / A+** buttons in the window's title bar. |
 | Tick the box at the start of a row | Adds the writ to your shopping list. **Shopping list (N)** at the top right shows or hides the list. |
 | Tick the box in the header row | Adds every writ shown (after your filters) to the list, or takes them all off. |

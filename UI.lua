@@ -1255,6 +1255,8 @@ SlashCmdList.WRITSLEDGER = function(message)
     if command == "learn" then
         ns.LearnNow()
         ns.Report("re-read your bags and quest log.")
+    elseif command == "lastbuy" then
+        ns.ReportLastBuy()
     elseif size then
         local scale = ns.ApplyWindowScale(tonumber(size) / 100)
         ns.Report(("window size %d%%."):format(scale * 100 + 0.5))

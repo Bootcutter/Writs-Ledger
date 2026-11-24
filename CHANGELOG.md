@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2
+
+- Fixed: writs (and other single items) bought on the Auction House did not tick off on the shopping list; only stackable items like bars and cloth did. Single-item buys are now counted when the Auction House confirms them.
+- The "You won an auction" line is now also read from the chat window itself: on Forever it can appear there without the system-message event addons listen to.
+- `/wledger lastbuy` shows the last "You won an auction" line and how Writs Ledger read it, for bug reports.
+
 ## 0.3.1
 
 - Writ item tooltips: an item a writ asks for gets a green "Writ item" note in its tooltip (in any bag addon, the Auction House and chat links) while that writ is in your bags, accepted or on your shopping list: which writ wants it, how many it needs and how many you have. Helps you not sell or use it by accident.

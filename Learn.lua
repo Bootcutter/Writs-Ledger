@@ -240,6 +240,83 @@ if hooksecurefunc and C_AuctionHouse and C_AuctionHouse.ConfirmCommoditiesPurcha
     end)
 end
 
+-- Single items (writs, gear) are bought with C_AuctionHouse.PlaceBid at the
+-- buyout price (Auctionator's buy dialog). The purchase counts when the AH
+-- confirms it, or when your money drops right after.
+local BID_WAIT = 5
+local pendingBid
+if hooksecurefunc and C_AuctionHouse and C_AuctionHouse.PlaceBid then
+    hooksecurefunc(C_AuctionHouse, "PlaceBid", function(auctionID, price)
+        pendingBid = nil
+        if type(auctionID) ~= "number" or not C_AuctionHouse.GetAuctionInfoByID then return end
+        local ok, info = pcall(C_AuctionHouse.GetAuctionInfoByID, auctionID)
+        if not ok or type(info) ~= "table" then return end
+        local buyout = Plain(info.buyoutAmount)
+        if type(buyout) == "number" and type(price) == "number" and price < buyout then return end -- a bid, not a buy
+        local name = NameFromLink(info.itemLink)
+        if not name and info.itemKey then name = ItemNameByID(info.itemKey.itemID) end
+        if not Tracked(name) then return end
+        pendingBid = {
+            auctionID = auctionID, name = name, n = Plain(info.quantity) or 1,
+            money = GetMoney and GetMoney() or 0, t = GetTime(),
+        }
+    end)
+end
+
+local function ConfirmBid(auctionID)
+    local bid = pendingBid
+    if not bid then return end
+    if GetTime() - bid.t > BID_WAIT then
+        pendingBid = nil
+        return
+    end
+    if auctionID then
+        if auctionID ~= bid.auctionID then return end
+    elseif not GetMoney or GetMoney() >= bid.money then
+        return
+    end
+    pendingBid = nil
+    RecordPurchase(bid.name, type(bid.n) == "number" and bid.n or 1, "bid")
+end
+
+-- The last "You won an auction" line and how it was read (/wledger lastbuy).
+local lastWon
+local secretLines = 0 -- system messages the client kept secret (unreadable)
+
+-- A purchase line from the system-message event or from a chat window. On
+-- Forever the line can reach the chat window without the event, so both are
+-- read; one line shown by both (or in several windows) arrives in the same
+-- frame and counts once.
+local lastLine, lastLineAt
+local Flush -- defined below (Events)
+local function OnChatLine(text, source)
+    if not Listening() then return end
+    if IsSecret(text) then
+        secretLines = secretLines + 1
+        return
+    end
+    if type(text) ~= "string" then return end
+    local name, count = ParseAuctionWon(text)
+    if not name then return end
+    local now = GetTime()
+    if text == lastLine and now == lastLineAt then return end
+    lastLine, lastLineAt = text, now
+    lastWon = { text = text, name = name, count = count, tracked = Tracked(name), source = source }
+    RecordPurchase(name, count, "chat")
+    Flush()
+end
+
+if hooksecurefunc then
+    for index = 1, NUM_CHAT_WINDOWS or 10 do
+        local chatFrame = _G["ChatFrame" .. index]
+        if chatFrame and chatFrame.AddMessage then
+            hooksecurefunc(chatFrame, "AddMessage", function(_, text)
+                pcall(OnChatLine, text, "chat window")
+            end)
+        end
+    end
+end
+
 -- Auction House results --------------------------------------------------------
 
 -- Legacy AH: list results carry links (name and ID).
@@ -402,7 +479,7 @@ end
 -- Redraws the window once, a moment after the last change, instead of once
 -- per event (AH scans and item-data loads fire many events in a burst).
 local flushQueued = false
-local function Flush()
+function Flush()
     if not changed or flushQueued then return end
     flushQueued = true
     C_Timer.After(0.3, function()
@@ -445,6 +522,8 @@ TryRegister("QUEST_TURNED_IN")
 TryRegister("CHAT_MSG_SYSTEM")
 TryRegister("COMMODITY_PURCHASE_SUCCEEDED")
 TryRegister("COMMODITY_PURCHASE_FAILED")
+TryRegister("AUCTION_HOUSE_PURCHASE_COMPLETED")
+TryRegister("PLAYER_MONEY")
 
 -- A writ was turned in: mark it done for today on this character.
 local function OnQuestTurnedIn(questID)
@@ -492,11 +571,13 @@ events:SetScript("OnEvent", function(_, event, arg1, arg2)
         pendingCommodity = nil
         changed = true
         ns.HideAHButton()
+        C_Timer.After(BID_WAIT, function() pendingBid = nil end)
     elseif event == "CHAT_MSG_SYSTEM" then
-        if not Listening() then return end
-        local name, count = ParseAuctionWon(arg1)
-        if not name then return end
-        RecordPurchase(name, count, "chat")
+        OnChatLine(arg1, "system message")
+    elseif event == "AUCTION_HOUSE_PURCHASE_COMPLETED" then
+        ConfirmBid(Plain(arg1))
+    elseif event == "PLAYER_MONEY" then
+        ConfirmBid(nil)
     elseif event == "COMMODITY_PURCHASE_SUCCEEDED" or event == "COMMODITY_PURCHASE_FAILED" then
         local pending = pendingCommodity
         pendingCommodity = nil
@@ -530,6 +611,17 @@ events:SetScript("OnEvent", function(_, event, arg1, arg2)
     end
     Flush()
 end)
+
+-- What the last "You won an auction" line said and how it was read (/wledger lastbuy).
+function ns.ReportLastBuy()
+    if not lastWon then
+        ns.Report(("no \"You won an auction\" line seen since login (%d unreadable system messages)."):format(secretLines))
+        return
+    end
+    ns.Report(("last purchase line (from the %s): %s"):format(lastWon.source, (tostring(lastWon.text):gsub("|", "||"))))
+    ns.Report(("read as: \"%s\" x%d, %s"):format(lastWon.name, lastWon.count,
+        lastWon.tracked and "a writ or requested item" or "not a writ item"))
+end
 
 -- Re-reads the quest log on demand (/wledger learn).
 function ns.LearnNow()
