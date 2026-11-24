@@ -13,7 +13,7 @@ Writs Ledger lists all 150 Craftsman's Writs. Each row shows the writ's tier, it
 - **One-click shopping.** At the Auction House, **Buy** (writ), **Buy** (item) and **Both** open Auctionator's Shopping tab with an exact search. You still click to buy every item yourself.
 - **Auctionator Full Scan button.** Starts Auctionator's own full scan from the table and shows its progress ("Auctionator scanning... 42%"). While any Auctionator scan runs, the Buy buttons are paused so a search can't cut the scan short. The table updates when the scan finishes.
 - **Shopping list.** Tick the writs you want to do. At the Auction House the list sits beside the AH window with each writ and its requested item. **Search all** searches for everything still missing in one go, and each line ticks itself off as you buy. Forever sends purchases by mail; they count right away and show as "in the mail" until they reach your bags. Turned-in writs leave the list by themselves.
-- **Writ tooltips.** Hover a Craftsman's Writ anywhere (bags, Auction House, chat links) to see its tier and reputation, the requested item and how many you have, the turn-in, and what the item costs.
+- **Writ tooltips.** Hover a Craftsman's Writ anywhere (bags, Auction House, chat links) to see its tier and reputation, the requested item and how many you have, the turn-in, and what the item costs. Items that a writ you carry (or have accepted or listed) asks for are marked **Writ item** in their tooltip, so you don't sell them by accident.
 - **Daily reset timer** at the bottom of the table, and a yellow note when most prices are a day or more old.
 - **Turn-in points.** Shows the zone and coordinates for 111 writs from the start. Click the zone to open the world map with a waypoint on the spot. Turn-in points for the rest are learned when you accept those writs.
 - **Filters and sorting.** Filter by tier, profession, turn-in zone (grouped by continent), "Only what I have" and name search. Click a column header to sort.
@@ -33,6 +33,7 @@ Writs Ledger lists all 150 Craftsman's Writs. Each row shows the writ's tier, it
 | `/wledger learn` | Reads your bags and quest log again. |
 | `/wledger size 120` | Sets the text and window size, from 80 to 150%. Also in **Options > AddOns > Writs Ledger** and with the **A- / A+** buttons in the window's title bar. |
 | Tick the box at the start of a row | Adds the writ to your shopping list. **Shopping list (N)** at the top right shows or hides the list. |
+| Tick the box in the header row | Adds every writ shown (after your filters) to the list, or takes them all off. |
 | Shopping list: click / right-click a line | Searches for that item / takes the writ off the list. |
 | Click a column header | Sorts by that column. Click again to reverse it. Writs without a price always come last. |
 | Click a turn-in zone | Opens the world map with a waypoint on the turn-in spot. This closes the Auction House if it is open. Untick **Open map on turn-in click** to set only the waypoint. |

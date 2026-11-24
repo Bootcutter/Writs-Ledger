@@ -70,6 +70,9 @@ end
 
 local changed = false
 
+-- Item IDs worth a name lookup in AH results (see Interesting below).
+local knownIDs, knownCount = {}, -1
+
 -- Records an item seen anywhere (bags, AH). Returns the writ's requested item
 -- name if it is a writ.
 local function Consider(name, itemID)
@@ -86,6 +89,8 @@ local function Consider(name, itemID)
         return item
     elseif ns.writsByItem[name] then
         ns.RememberID(name, itemID)
+        -- A requested item's ID just learned: AH results with it count from now on.
+        if not knownIDs[itemID] then knownCount = -1 end
     end
 end
 
@@ -116,7 +121,6 @@ end
 -- lookup if it is a requested item we already know. This keeps an AH-wide
 -- scan (thousands of results) from loading item data for every item.
 local WRIT_ID_MIN, WRIT_ID_MAX = 264000, 264999
-local knownIDs, knownCount = {}, -1
 
 local function Interesting(itemID)
     if itemID >= WRIT_ID_MIN and itemID <= WRIT_ID_MAX then return true end
@@ -172,7 +176,7 @@ end
 local CHAT_GRACE = 30 -- seconds after closing the AH that a purchase line still counts
 local DUPLICATE_WINDOW = 10
 local ahClosedAt
-local recentBuys = {} -- name -> { t, n, via }
+local recentBuys = {} -- name -> list of unmatched reports { t, n, via }, oldest first
 
 -- Is this name a writ or a requested item?
 local function Tracked(name)
@@ -184,16 +188,24 @@ end
 local function RecordPurchase(name, count, via)
     if not Tracked(name) or type(count) ~= "number" or count < 1 then return end
     local now = GetTime()
-    local recent = recentBuys[name]
-    if recent and now - recent.t < DUPLICATE_WINDOW and recent.via ~= via then
-        -- The same purchase reported the other way: count only what is new.
-        local extra = count - recent.n
-        recentBuys[name] = nil
-        if extra <= 0 then return end
-        count = extra
-    else
-        recentBuys[name] = { t = now, n = count, via = via }
+    local reports = recentBuys[name] or {}
+    recentBuys[name] = reports
+    for index = #reports, 1, -1 do
+        if now - reports[index].t >= DUPLICATE_WINDOW then table.remove(reports, index) end
     end
+    -- The same purchase already reported the other way (oldest first, so two
+    -- quick buys reported as A, A, B, B pair up correctly): count only what is new.
+    for index, report in ipairs(reports) do
+        if report.via ~= via then
+            table.remove(reports, index)
+            count = count - report.n
+            if count <= 0 then return end
+            ns.AddOnWay(name, count)
+            changed = true
+            return
+        end
+    end
+    reports[#reports + 1] = { t = now, n = count, via = via }
     ns.AddOnWay(name, count)
     changed = true
 end
@@ -350,9 +362,11 @@ local function FindQuestLocation(questID, expectedMapID)
 end
 
 local function LearnTurnIns()
+    local active = {} -- writs in the quest log now (accepting a writ uses up the item)
     ForEachQuest(function(title, questID)
         if type(title) ~= "string" or title:sub(1, #PREFIX) ~= PREFIX or type(questID) ~= "number" then return end
         local item = title:sub(#PREFIX + 1)
+        active[item] = true
         ns.AddWrit(item)
         local learned = ns.Learned(item, true)
         local entry = ns.writsByItem[item]
@@ -374,6 +388,13 @@ local function LearnTurnIns()
             ns.Report(("confirmed the turn-in for %s: %s %.1f, %.1f"):format(item, learned.turnIn.zone, x * 100, y * 100))
         end
     end)
+    for item in pairs(active) do
+        if not ns.activeWrits[item] then changed = true end
+    end
+    for item in pairs(ns.activeWrits) do
+        if not active[item] then changed = true end
+    end
+    ns.activeWrits = active
 end
 
 -- Events -------------------------------------------------------------------------
@@ -438,12 +459,13 @@ local function OnQuestTurnedIn(questID)
     end
     if not entry then return end
     ns.MarkTurnedIn(entry.item)
+    ns.activeWrits[entry.item] = nil
     -- Done with this writ for today: off the shopping list.
     if ns.InList(entry.item) then ns.SetInList(entry.item, false) end
     changed = true
 end
 
-events:SetScript("OnEvent", function(_, event, arg1)
+events:SetScript("OnEvent", function(_, event, arg1, arg2)
     if event == "ADDON_LOADED" then
         if arg1 == addonName then ns.InitializeDatabase() end
         return
@@ -493,7 +515,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         if type(arg1) ~= "number" or not pendingIDs[arg1] then return end
         pendingIDs[arg1] = nil
-        ConsiderID(arg1)
+        -- Failed loads (no such item) are not requested again.
+        if arg2 ~= false then ConsiderID(arg1) end
     elseif event == "QUEST_DETAIL" then
         LearnFromQuestDetail()
     elseif event == "QUEST_ACCEPTED" then

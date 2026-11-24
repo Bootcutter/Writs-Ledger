@@ -36,6 +36,7 @@ local state = {
 
 local frame, rows, list, scrollBar, statusText, scanButton, lastScanText, professionButton, zoneButton, zonePopup, tierButtons
 local listButton
+local headerCheck
 local ahButton
 
 function ns.WindowShown()
@@ -292,6 +293,15 @@ local function DrawRows()
     scanButton:SetEnabled(ns.ahOpen and not ns.AuctionatorScanning())
     lastScanText:SetText(LastScanText())
     listButton:SetText(("Shopping list (%d)"):format(#ns.ListEntries()))
+    -- Header box: ticked when every writ shown is on the list.
+    if headerCheck then
+        local allIn = #list > 0
+        for _, entry in ipairs(list) do
+            if not ns.InList(entry.item) then allIn = false break end
+        end
+        headerCheck:SetChecked(allIn)
+        headerCheck:SetEnabled(#list > 0)
+    end
 end
 
 local function RefreshTierButtons()
@@ -686,7 +696,7 @@ local function CreateWindow()
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     title:SetPoint("TOP", frame, "TOP", 0, -6)
-    title:SetText("Craftsman's Writs")
+    title:SetText("Writs Ledger")
 
     -- Filter bar ---------------------------------------------------------------
     local x = 14
@@ -832,6 +842,23 @@ local function CreateWindow()
             highlight:SetColorTexture(1, 1, 1, 0.08)
         end
     end
+    -- Header box: puts every writ shown (after the filters) on the shopping list,
+    -- or takes them all off when they are all on it already.
+    headerCheck = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+    headerCheck:SetSize(18, 18)
+    headerCheck:SetPoint("LEFT", frame, "TOPLEFT", 10, HEADER_Y - 8)
+    headerCheck:SetScript("OnClick", function()
+        local items, allIn = {}, true
+        for _, entry in ipairs(list) do
+            items[#items + 1] = entry.item
+            if not ns.InList(entry.item) then allIn = false end
+        end
+        ns.SetManyInList(items, not allIn) -- redraws and sets the box
+    end)
+    SetSimpleTooltip(headerCheck, "Shopping list: all shown",
+        "Adds every writ shown (after your filters) to the shopping list. When they are all on it, "
+        .. "takes them all off. Filter first to add only some, for example one tier or profession.")
+
     local line = frame:CreateTexture(nil, "ARTWORK")
     line:SetColorTexture(1, 0.82, 0, 0.35)
     line:SetHeight(1)

@@ -29,3 +29,6 @@
     - Turn in a listed writ: it leaves the list. Log in on another character: its list is empty (lists are per character). `/reload`: the list and the mail counts are kept.
     - While Auctionator scans, **Search all** is greyed out.
 20. Report what the Auction House says in chat when you buy (copy the line), if the shopping list does not tick off.
+21. Header box (0.3.1): the window title reads "Writs Ledger". Filter to one profession and tick the box at the left of the header row: every writ shown is ticked and the shopping list count goes up by that many. Click it again: they all come off. Tick one row by hand while the box is unticked, then click the box: all shown get ticked (not unticked). With a filter that shows no writs the box is greyed out.
+22. Accepted writ (0.3.1): put a writ you carry on the shopping list and accept it: the line stays 1/1 (not 2/1) and its tooltip says "Accepted". Abandon the quest: within a few seconds the "Accepted" note goes.
+24. Writ item tooltip (0.3.1): carry a writ and some of its requested item. Hover the item in your bags (try your bag addon and the default bags): a green "Writ item (Writs Ledger)" block names the writ, "Needs N, you have M" and "Writ in your bags". Sell or bank the writ (and take it off the shopping list): the block no longer shows on the item. Hover an ordinary item: nothing added.

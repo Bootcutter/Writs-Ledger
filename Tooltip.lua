@@ -6,7 +6,8 @@ local _, ns = ...
 
 local IsSecret = ns.IsSecret
 
--- The writ entry for an item ID, or nil when the item is not a writ.
+-- The writ entry for an item ID and whether the item is the writ itself
+-- (true) or the item a writ requests (false). nil when it is neither.
 local function EntryForItemID(itemID)
     if type(itemID) ~= "number" or IsSecret(itemID) then return nil end
     local name
@@ -15,14 +16,47 @@ local function EntryForItemID(itemID)
         if ok and not IsSecret(value) then name = value end
     end
     if type(name) == "string" then
-        if name:sub(1, #ns.WRIT_PREFIX) ~= ns.WRIT_PREFIX then return nil end
-        return ns.writsByItem[name:sub(#ns.WRIT_PREFIX + 1)]
+        if name:sub(1, #ns.WRIT_PREFIX) ~= ns.WRIT_PREFIX then
+            local entry = ns.writsByItem[name]
+            if entry then return entry, false end
+            return nil
+        end
+        local entry = ns.writsByItem[name:sub(#ns.WRIT_PREFIX + 1)]
+        if entry then return entry, true end
+        return nil
     end
     -- Name not loaded yet: writ items are numbered 264000-264999; find it among
     -- the IDs learned or in the data.
     if itemID < 264000 or itemID > 264999 then return nil end
     for _, entry in ipairs(ns.writs) do
-        if ns.ItemID(ns.WritName(entry)) == itemID then return entry end
+        if ns.ItemID(ns.WritName(entry)) == itemID then return entry, true end
+    end
+end
+
+-- Is this writ yours to fill: in your bags, accepted, or on your shopping list?
+local function WritInPlay(entry)
+    return (ns.owned[ns.WritName(entry)] or 0) > 0 or ns.activeWrits[entry.item] == true or ns.InList(entry.item)
+end
+
+-- On the item a writ asks for, while that writ is in play: so it is not sold
+-- or used up by accident.
+local function AddItemLines(tooltip, entry)
+    local tier = ns.Tier(entry)
+    local r, g, b = unpack(ns.TierColor(tier))
+    tooltip:AddLine(" ")
+    tooltip:AddLine("Writ item (Writs Ledger)", 0.2, 1, 0.6)
+    tooltip:AddLine(("Requested by %s%s"):format(ns.WritName(entry), tier and (" (" .. tier .. ")") or ""), r, g, b, true)
+    local count, known = ns.Count(entry)
+    local have = ns.owned[entry.item] or 0
+    local mail = ns.OnWay(entry.item)
+    local haveText = ("you have %d%s"):format(have, mail > 0 and (", %d in the mail"):format(mail) or "")
+    tooltip:AddLine(known and ("Needs %d, %s."):format(count, haveText) or (haveText:gsub("^y", "Y") .. "."), 1, 1, 1, true)
+    local where = {}
+    if (ns.owned[ns.WritName(entry)] or 0) > 0 then where[#where + 1] = "writ in your bags" end
+    if ns.activeWrits[entry.item] then where[#where + 1] = "accepted" end
+    if ns.InList(entry.item) then where[#where + 1] = "on your shopping list" end
+    if #where > 0 then
+        tooltip:AddLine(table.concat(where, ", "):gsub("^%l", string.upper) .. ".", 0.6, 0.6, 0.6, true)
     end
 end
 
@@ -78,14 +112,15 @@ local function Clear(tooltip) tooltip.writsLedgerShown = nil end
 
 local function OnItemTooltip(tooltip, itemID)
     if not tooltip or tooltip.writsLedgerShown == itemID then return end
-    local entry = EntryForItemID(itemID)
+    local entry, isWrit = EntryForItemID(itemID)
     if not entry then return end
+    if not isWrit and not WritInPlay(entry) then return end
     -- Once per tooltip, even if the hook fires twice; cleared with the tooltip.
     if not tooltip.writsLedgerHooked and tooltip.HookScript then
         tooltip.writsLedgerHooked = pcall(tooltip.HookScript, tooltip, "OnTooltipCleared", Clear)
     end
     if tooltip.writsLedgerHooked then tooltip.writsLedgerShown = itemID end
-    local ok = pcall(AddWritLines, tooltip, entry)
+    local ok = pcall(isWrit and AddWritLines or AddItemLines, tooltip, entry)
     if ok and tooltip:IsShown() then tooltip:Show() end -- resize to the new lines
 end
 

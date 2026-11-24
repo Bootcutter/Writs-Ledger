@@ -40,6 +40,7 @@ local db
 ns.writs = {}        -- list of seed entries (see Data.lua), plus writs learned in-game
 ns.writsByItem = {}  -- requested item name -> entry
 ns.owned = {}        -- item name -> count in your bags (writs by writ name)
+ns.activeWrits = {}  -- requested item name -> true while that writ is in your quest log
 ns.ahOpen = false
 
 local seedIDs = {}   -- name -> item ID, from the seed data
@@ -353,6 +354,14 @@ function ns.SetInList(item, on)
     local list = CharacterTable("lists")
     if not list then return end
     list[item] = on and true or nil
+    if ns.ShoppingListChanged then ns.ShoppingListChanged(on) end
+end
+
+-- Puts several writs on the list or takes them off (one redraw).
+function ns.SetManyInList(items, on)
+    local list = CharacterTable("lists")
+    if not list then return end
+    for _, item in ipairs(items) do list[item] = on and true or nil end
     if ns.ShoppingListChanged then ns.ShoppingListChanged(on) end
 end
 

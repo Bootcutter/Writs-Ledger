@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1
+
+- Writ item tooltips: an item a writ asks for gets a green "Writ item" note in its tooltip (in any bag addon, the Auction House and chat links) while that writ is in your bags, accepted or on your shopping list: which writ wants it, how many it needs and how many you have. Helps you not sell or use it by accident.
+- A box in the table's header row puts every writ shown (after your filters) on the shopping list, or takes them all off again.
+- The window title reads "Writs Ledger" (it said "Craftsman's Writs").
+- Shopping list: a writ line's tooltip says when that writ is already accepted (in your quest log).
+- Fixed: two quick purchases of the same item could be counted three times on the shopping list.
+- Requested items first seen in your bags are now also recognised in Auction House results.
+
 ## 0.3.0
 
 - Shopping list: tick the box at the start of a row to add a writ. At the Auction House the list sits beside the AH window with a line for each writ and its requested item. **Search all** searches for everything still missing at once, and each line ticks itself off as you buy, even though Forever sends purchases by mail ("3 mail" until they reach your bags). Click a line to search for just that item; right-click to remove the writ. Turned-in writs leave the list by themselves. The list is kept per character.

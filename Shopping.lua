@@ -36,6 +36,8 @@ function ns.ShoppingLines()
     end
     for _, line in ipairs(result) do
         line.mail = ns.OnWay(line.name)
+        -- An accepted writ stays in the bags, so it already counts; noted in the tooltip.
+        line.accepted = line.isWrit and ns.activeWrits[line.entry.item] == true
         line.have = (ns.owned[line.name] or 0) + line.mail
     end
     return result
@@ -76,7 +78,10 @@ local function LineTooltip(button)
     if not line then return end
     GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
     GameTooltip:SetText(line.name, 1, 1, 1)
-    GameTooltip:AddLine(("Needed: %d. In your bags: %d."):format(line.need, line.have - line.mail), 0.8, 0.8, 0.8)
+    GameTooltip:AddLine(("Needed: %d. In your bags: %d."):format(line.need, ns.owned[line.name] or 0), 0.8, 0.8, 0.8)
+    if line.accepted then
+        GameTooltip:AddLine("Accepted: this writ is in your quest log.", 0.4, 1, 0.4)
+    end
     if line.mail > 0 then
         GameTooltip:AddLine(("Bought and on its way by mail: %d."):format(line.mail), 0.4, 0.8, 1, true)
     end
