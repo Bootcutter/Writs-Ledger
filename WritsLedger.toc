@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: Writs Ledger
-## Notes: A table of every Craftsman's Writ with tier, requested item, turn-in point and Auctionator prices, with buy buttons.
+## Notes: A table of every Craftsman's Writ with tier, requested item, turn-in point and Auctionator prices, with buy buttons, a shopping list and writ tooltips.
 ## Author: bootcut
-## Version: 0.2.5
+## Version: 0.3.0
 ## X-License: GPL-3.0
 ## RequiredDeps: Auctionator
 ## SavedVariables: WritsLedgerDB
@@ -11,3 +11,5 @@ Data.lua
 Core.lua
 Learn.lua
 UI.lua
+Shopping.lua
+Tooltip.lua

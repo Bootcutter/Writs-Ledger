@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Shopping list: tick the box at the start of a row to add a writ. At the Auction House the list sits beside the AH window with a line for each writ and its requested item. **Search all** searches for everything still missing at once, and each line ticks itself off as you buy, even though Forever sends purchases by mail ("3 mail" until they reach your bags). Click a line to search for just that item; right-click to remove the writ. Turned-in writs leave the list by themselves. The list is kept per character.
+- Writ tooltips: hovering a Craftsman's Writ anywhere (bags, Auction House, chat links) shows its tier and reputation, the requested item and how many you have, the turn-in, the item's cost and whether this character has done it today.
+- Daily reset timer: the bottom line shows "Daily reset in 5 h 12 min", and so do the tooltips of writs done today.
+- When most prices are a day or more old, the top of the window says so in yellow ("Prices are 2 days old: scan again.").
+
 ## 0.2.5
 
 - While Auctionator scans, the Buy and Full Scan buttons are greyed out and the window shows "Auctionator scanning... N%". A search during the scan cut it short ("Finished processing 0 items").

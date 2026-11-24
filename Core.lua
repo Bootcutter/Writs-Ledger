@@ -152,9 +152,10 @@ local function CharacterKey()
     local realm = GetRealmName and GetRealmName() or ""
     return name and (name .. "-" .. realm) or nil
 end
+ns.CharacterKey = CharacterKey
 
--- Time of the last daily reset, or nil when the client does not say.
-local function LastDailyReset()
+-- Seconds until the next daily reset, or nil when the client does not say.
+function ns.SecondsUntilReset()
     local untilReset
     if C_DateAndTime and C_DateAndTime.GetSecondsUntilDailyReset then
         local ok, seconds = pcall(C_DateAndTime.GetSecondsUntilDailyReset)
@@ -165,6 +166,21 @@ local function LastDailyReset()
         if ok then untilReset = seconds end
     end
     if type(untilReset) ~= "number" or untilReset <= 0 then return nil end
+    return untilReset
+end
+
+-- "5 h 12 min", "12 min" or "less than a minute".
+function ns.FormatDuration(seconds)
+    local minutes = math.floor(seconds / 60)
+    if minutes < 1 then return "less than a minute" end
+    if minutes < 60 then return ("%d min"):format(minutes) end
+    return ("%d h %d min"):format(minutes / 60, minutes % 60)
+end
+
+-- Time of the last daily reset, or nil when the client does not say.
+local function LastDailyReset()
+    local untilReset = ns.SecondsUntilReset()
+    if not untilReset then return nil end
     return time() + untilReset - 86400
 end
 
@@ -298,6 +314,110 @@ function ns.Prices(entry)
     if itemPrice then itemPrice = itemPrice * count end
     local total = writPrice and itemPrice and (writPrice + itemPrice) or nil
     return writPrice, itemPrice, total, writAge, itemAge
+end
+
+-- Typical age in days of the prices in the table (the median over every writ
+-- and requested item with a price), or nil when there are no prices.
+function ns.TypicalPriceAge()
+    local ages = {}
+    for _, entry in ipairs(ns.writs) do
+        local writPrice, itemPrice, _, writAge, itemAge = ns.Prices(entry)
+        if writPrice then ages[#ages + 1] = writAge or 0 end
+        if itemPrice then ages[#ages + 1] = itemAge or 0 end
+    end
+    if #ages == 0 then return nil end
+    table.sort(ages)
+    return ages[math.floor((#ages + 1) / 2)]
+end
+
+-- Shopping list (per character) ----------------------------------------------
+--   db.lists[character][item]          = true: the writ for `item` is on the list
+--   db.onWay[character][name] = { n, base }: n bought on the AH and on its way
+--     by mail; base = how many were in your bags then. Arrived = bag count
+--     above base.
+
+local function CharacterTable(field)
+    local key = CharacterKey()
+    if not db or not key then return nil end
+    db[field] = type(db[field]) == "table" and db[field] or {}
+    db[field][key] = type(db[field][key]) == "table" and db[field][key] or {}
+    return db[field][key]
+end
+
+function ns.InList(item)
+    local list = CharacterTable("lists")
+    return list ~= nil and list[item] == true
+end
+
+function ns.SetInList(item, on)
+    local list = CharacterTable("lists")
+    if not list then return end
+    list[item] = on and true or nil
+    if ns.ShoppingListChanged then ns.ShoppingListChanged(on) end
+end
+
+-- Writ entries on the list, in table order (tier, then name).
+function ns.ListEntries()
+    local list, result = CharacterTable("lists"), {}
+    if not list then return result end
+    for _, entry in ipairs(ns.writs) do
+        if list[entry.item] then result[#result + 1] = entry end
+    end
+    table.sort(result, function(a, b)
+        local ta = ns.TIER_ORDER[ns.Tier(a) or ""] or 99
+        local tb = ns.TIER_ORDER[ns.Tier(b) or ""] or 99
+        if ta ~= tb then return ta < tb end
+        return a.item < b.item
+    end)
+    return result
+end
+
+function ns.ClearList()
+    local list = CharacterTable("lists")
+    if not list then return end
+    for item in pairs(list) do list[item] = nil end
+    local onWay = CharacterTable("onWay")
+    if onWay then for name in pairs(onWay) do onWay[name] = nil end end
+    if ns.ShoppingListChanged then ns.ShoppingListChanged(false) end
+end
+
+-- How many of `name` were bought and are still in the mail.
+function ns.OnWay(name)
+    local onWay = CharacterTable("onWay")
+    local pending = onWay and onWay[name]
+    return type(pending) == "table" and pending.n or 0
+end
+
+function ns.AddOnWay(name, count)
+    local onWay = CharacterTable("onWay")
+    if not onWay then return end
+    local pending = type(onWay[name]) == "table" and onWay[name] or nil
+    if pending then
+        pending.n = pending.n + count
+    else
+        onWay[name] = { n = count, base = ns.owned[name] or 0 }
+    end
+end
+
+-- After a bag scan: what reached the bags is no longer on its way. Items
+-- used up meanwhile lower the base, so a later delivery still counts.
+function ns.UpdateOnWay()
+    local onWay = CharacterTable("onWay")
+    if not onWay then return end
+    for name, pending in pairs(onWay) do
+        if type(pending) ~= "table" then
+            onWay[name] = nil
+        else
+            local bags = ns.owned[name] or 0
+            if bags < pending.base then pending.base = bags end
+            local arrived = bags - pending.base
+            if arrived > 0 then
+                pending.n = pending.n - arrived
+                pending.base = bags
+            end
+            if pending.n <= 0 then onWay[name] = nil end
+        end
+    end
 end
 
 function ns.FormatMoney(copper)

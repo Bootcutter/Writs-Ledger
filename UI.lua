@@ -1,7 +1,7 @@
 local addonName, ns = ...
 
 -- The writ table window. One row per writ:
---   Writ (tier colour) | Profession | Count | Have | Turn-in | Writ price [Buy] | Item price [Buy] | Total [Both]
+--   [list] Writ (tier colour) | Profession | Count | Have | Turn-in | Writ price [Buy] | Item price [Buy] | Total [Both]
 -- Prices come from Auctionator's saved prices, so the window works anywhere;
 -- Buy and Scan need the Auction House open.
 
@@ -12,7 +12,7 @@ local HEADER_Y = -88
 
 -- Column layout: key, title, x, width, justify, sort key.
 local COLUMNS = {
-    { key = "name",   title = "Writ (requested item)", x = 12,  width = 230, justify = "LEFT",  sort = "name" },
+    { key = "name",   title = "Writ (requested item)", x = 30,  width = 212, justify = "LEFT",  sort = "name" },
     { key = "prof",   title = "Profession",             x = 246, width = 100, justify = "LEFT",  sort = "profession" },
     { key = "count",  title = "Count",                  x = 348, width = 40,  justify = "CENTER" },
     { key = "have",   title = "Have",                   x = 390, width = 56,  justify = "CENTER", sort = "have" },
@@ -35,6 +35,7 @@ local state = {
 }
 
 local frame, rows, list, scrollBar, statusText, scanButton, lastScanText, professionButton, zoneButton, zonePopup, tierButtons
+local listButton
 local ahButton
 
 function ns.WindowShown()
@@ -230,6 +231,7 @@ local function DrawRow(row, entry)
 
     local canBuy = ns.ahOpen and not ns.AuctionatorScanning()
     for _, button in ipairs(row.buy) do button:SetEnabled(canBuy) end
+    row.listCheck:SetChecked(ns.InList(entry.item))
     row:Show()
 end
 
@@ -239,14 +241,31 @@ local function LastScanText()
     if progress then
         return ("|cffffd100Auctionator scanning... %d%%|r"):format(math.floor(progress * 100 + 0.5))
     end
+    local text
     local last = ns.LastScan()
-    if not last then return "Last scan: never" end
-    local seconds = math.max(0, time() - last)
-    if seconds < 60 then return "Last scan: just now" end
-    if seconds < 3600 then return ("Last scan: %d min ago"):format(seconds / 60) end
-    if seconds < 86400 then return ("Last scan: %d h ago"):format(seconds / 3600) end
-    return ("Last scan: %d days ago"):format(seconds / 86400)
+    if not last then
+        text = "Last scan: never"
+    else
+        local seconds = math.max(0, time() - last)
+        if seconds < 60 then text = "Last scan: just now"
+        elseif seconds < 3600 then text = ("Last scan: %d min ago"):format(seconds / 60)
+        elseif seconds < 86400 then text = ("Last scan: %d h ago"):format(seconds / 3600)
+        else text = ("Last scan: %d days ago"):format(seconds / 86400) end
+    end
+    -- Most prices older than today: say so (writ prices swing from day to day).
+    local age = ns.TypicalPriceAge()
+    if age and age >= 1 then
+        text = ("|cffffd100Prices are %d day%s old: scan again.|r  %s"):format(age, age == 1 and "" or "s", text)
+    end
+    return text
 end
+
+local function ResetText()
+    local seconds = ns.SecondsUntilReset()
+    if not seconds then return "" end
+    return ("  Daily reset in %s."):format(ns.FormatDuration(seconds))
+end
+ns.ResetText = ResetText
 
 local function DrawRows()
     if not frame then return end
@@ -269,9 +288,10 @@ local function DrawRows()
     elseif ns.AuctionatorScanning() then
         where = "  |cffffd100Buy is paused until Auctionator's scan finishes.|r"
     end
-    statusText:SetText(("%d writs shown, %d with full prices.%s"):format(#list, priced, where))
+    statusText:SetText(("%d writs shown, %d with full prices.%s%s"):format(#list, priced, ResetText(), where))
     scanButton:SetEnabled(ns.ahOpen and not ns.AuctionatorScanning())
     lastScanText:SetText(LastScanText())
+    listButton:SetText(("Shopping list (%d)"):format(#ns.ListEntries()))
 end
 
 local function RefreshTierButtons()
@@ -297,6 +317,7 @@ function ns.RefreshScanStatus()
 end
 
 function ns.RefreshWindow()
+    if ns.RefreshShoppingList then ns.RefreshShoppingList() end
     if not ns.WindowShown() then return end
     BuildList()
     DrawRows()
@@ -318,7 +339,12 @@ local function ShowRowTooltip(row)
     GameTooltip:AddLine(known and ("Requests %d %s"):format(count, entry.item)
         or ("Requests %s (count not seen yet; right-click the writ to learn it)"):format(entry.item), 1, 1, 1, true)
     if ns.DoneToday(entry) then
-        GameTooltip:AddLine("Already done today.", 0.6, 0.6, 0.6)
+        local seconds = ns.SecondsUntilReset()
+        GameTooltip:AddLine("Already done today." .. (seconds and (" Daily reset in " .. ns.FormatDuration(seconds) .. ".") or ""),
+            0.6, 0.6, 0.6)
+    end
+    if ns.InList(entry.item) then
+        GameTooltip:AddLine("On your shopping list.", 0.4, 0.8, 1)
     end
     local turnIn, source = ns.TurnIn(entry)
     if turnIn then
@@ -369,6 +395,7 @@ local function SetSimpleTooltip(widget, title, text)
     end)
     widget:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
+ns.CreateButton, ns.SetSimpleTooltip = CreateButton, SetSimpleTooltip
 
 local function CreateRow(parent, index)
     local row = CreateFrame("Button", nil, parent)
@@ -431,6 +458,18 @@ local function CreateRow(parent, index)
         text:SetWordWrap(false)
         row.cells[column.key] = text
     end
+
+    -- Shopping list box, left of the name.
+    local listCheck = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+    listCheck:SetSize(18, 18)
+    listCheck:SetPoint("LEFT", row, "LEFT", 2, 0)
+    listCheck:SetScript("OnClick", function(self)
+        if row.entry then ns.SetInList(row.entry.item, self:GetChecked()) end -- redraws
+    end)
+    SetSimpleTooltip(listCheck, "Shopping list",
+        "Adds this writ and its requested item to your shopping list. At the Auction House the list "
+        .. "searches for everything at once and ticks items off as you buy them.")
+    row.listCheck = listCheck
 
     row.buy = {}
     local function BuyButton(x, label, names)
@@ -837,6 +876,13 @@ local function CreateWindow()
         "On: clicking a turn-in opens the world map with a waypoint there (this closes the Auction House if it is open). "
         .. "Off: it only sets the waypoint.")
 
+    listButton = CreateButton(frame, "Shopping list (0)", 130, function()
+        if ns.ToggleShoppingList then ns.ToggleShoppingList() end
+    end)
+    listButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -56)
+    SetSimpleTooltip(listButton, "Shopping list",
+        "Shows or hides the shopping list. Tick the box at the start of a row to add a writ.")
+
     statusText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     statusText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 14, 12)
     statusText:SetJustifyH("LEFT")
@@ -886,6 +932,10 @@ local function CreateWindow()
         openMap:SetChecked(ns.OpenMapOnClick())
         RefreshTierButtons()
         ns.RefreshWindow()
+    end)
+    -- The shopping list beside the table goes with it (it stays at the AH).
+    frame:SetScript("OnHide", function()
+        if ns.RefreshShoppingList then ns.RefreshShoppingList() end
     end)
 end
 

@@ -157,7 +157,75 @@ local function ScanBags()
         end
     end
     ns.owned = owned
+    -- Bought items reaching the bags are no longer "in the mail". Not in the
+    -- first seconds after login, while the bags may still be loading.
+    if ns.bagsSettled then ns.UpdateOnWay() end
     changed = true -- the Have column follows the bags
+end
+
+-- Auction House purchases ------------------------------------------------------
+-- On Forever, bought items go to the mailbox, so the bags do not show them
+-- yet. The server says "You won an auction for [Item]x10 for 3g 20s" in chat
+-- (ERR_AUCTION_WON_S, plus Forever's price); commodity buys also fire
+-- COMMODITY_PURCHASE_SUCCEEDED. Either one counts the purchase, once.
+
+local CHAT_GRACE = 30 -- seconds after closing the AH that a purchase line still counts
+local DUPLICATE_WINDOW = 10
+local ahClosedAt
+local recentBuys = {} -- name -> { t, n, via }
+
+-- Is this name a writ or a requested item?
+local function Tracked(name)
+    if type(name) ~= "string" then return false end
+    if name:sub(1, #PREFIX) == PREFIX then return ns.writsByItem[name:sub(#PREFIX + 1)] ~= nil end
+    return ns.writsByItem[name] ~= nil
+end
+
+local function RecordPurchase(name, count, via)
+    if not Tracked(name) or type(count) ~= "number" or count < 1 then return end
+    local now = GetTime()
+    local recent = recentBuys[name]
+    if recent and now - recent.t < DUPLICATE_WINDOW and recent.via ~= via then
+        -- The same purchase reported the other way: count only what is new.
+        local extra = count - recent.n
+        recentBuys[name] = nil
+        if extra <= 0 then return end
+        count = extra
+    else
+        recentBuys[name] = { t = now, n = count, via = via }
+    end
+    ns.AddOnWay(name, count)
+    changed = true
+end
+
+local function Listening()
+    return ns.ahOpen or (ahClosedAt ~= nil and GetTime() - ahClosedAt < CHAT_GRACE)
+end
+
+-- Item name and count from a "You won an auction for ..." line, or nil.
+local function ParseAuctionWon(message)
+    message = Plain(message)
+    if type(message) ~= "string" then return nil end
+    local format = type(ERR_AUCTION_WON_S) == "string" and ERR_AUCTION_WON_S or "You won an auction for %s"
+    local lead = format:match("^(.-)%%s")
+    if not lead or lead == "" then return nil end
+    message = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    local at = message:find(lead, 1, true)
+    if not at then return nil end
+    local what = message:sub(at + #lead)
+    local name, rest = what:match("^|H.-|h%[(.-)%]|h(.*)$")
+    if not name then name, rest = what:match("^%[(.-)%](.*)$") end
+    if not name then name, rest = what:match("^(.-)%s*([xX]%d+.*)$") end
+    if not name then name, rest = what:match("^(.-)%s+for%s.*$") or what:gsub("%.$", ""), "" end
+    local count = tonumber((rest or ""):match("^%s*[xX]%s*(%d+)")) or 1
+    return strtrim(name), count
+end
+
+local pendingCommodity
+if hooksecurefunc and C_AuctionHouse and C_AuctionHouse.ConfirmCommoditiesPurchase then
+    hooksecurefunc(C_AuctionHouse, "ConfirmCommoditiesPurchase", function(itemID, quantity)
+        pendingCommodity = type(itemID) == "number" and { itemID = itemID, n = quantity or 1 } or nil
+    end)
 end
 
 -- Auction House results --------------------------------------------------------
@@ -353,6 +421,9 @@ TryRegister("QUEST_DETAIL")
 TryRegister("QUEST_ACCEPTED")
 TryRegister("QUEST_LOG_UPDATE")
 TryRegister("QUEST_TURNED_IN")
+TryRegister("CHAT_MSG_SYSTEM")
+TryRegister("COMMODITY_PURCHASE_SUCCEEDED")
+TryRegister("COMMODITY_PURCHASE_FAILED")
 
 -- A writ was turned in: mark it done for today on this character.
 local function OnQuestTurnedIn(questID)
@@ -367,6 +438,8 @@ local function OnQuestTurnedIn(questID)
     end
     if not entry then return end
     ns.MarkTurnedIn(entry.item)
+    -- Done with this writ for today: off the shopping list.
+    if ns.InList(entry.item) then ns.SetInList(entry.item, false) end
     changed = true
 end
 
@@ -379,16 +452,34 @@ events:SetScript("OnEvent", function(_, event, arg1)
         ns.RegisterPriceUpdates()
         ScanBags()
         QueueQuestLogScan(3)
+        C_Timer.After(10, function()
+            ns.bagsSettled = true
+            ScanBags()
+            Flush()
+        end)
     elseif event == "BAG_UPDATE_DELAYED" then
         ScanBags()
     elseif event == "AUCTION_HOUSE_SHOW" then
         ns.ahOpen = true
+        ahClosedAt = nil
         changed = true -- enables Buy/Scan
         ns.ShowAHButton()
     elseif event == "AUCTION_HOUSE_CLOSED" then
         ns.ahOpen = false
+        ahClosedAt = GetTime()
+        pendingCommodity = nil
         changed = true
         ns.HideAHButton()
+    elseif event == "CHAT_MSG_SYSTEM" then
+        if not Listening() then return end
+        local name, count = ParseAuctionWon(arg1)
+        if not name then return end
+        RecordPurchase(name, count, "chat")
+    elseif event == "COMMODITY_PURCHASE_SUCCEEDED" or event == "COMMODITY_PURCHASE_FAILED" then
+        local pending = pendingCommodity
+        pendingCommodity = nil
+        if not pending or event == "COMMODITY_PURCHASE_FAILED" then return end
+        RecordPurchase(ItemNameByID(pending.itemID), pending.n, "commodity")
     elseif event == "AUCTION_ITEM_LIST_UPDATE" then
         ScanLegacyResults()
     elseif event == "AUCTION_HOUSE_BROWSE_RESULTS_ADDED" then

@@ -16,3 +16,16 @@
 13. Route fix (0.2.1): Solid Sharpening Stone, Fire Protection Potion and Nightscape Shoulders show Searing Gorge (pale) after updating. Accept one of them while in Ironforge: chat confirms Searing Gorge, not Dun Morogh. Catseye Ultra Goggles shows Feralas, Dusky Bracers Dustwallow Marsh.
 14. Look (0.2.2): the window background is an even near-black, with no grey texture or inner border; the Zones panel matches.
 15. Size (0.2.2): click A+ a few times: the whole window and its text grow, nothing is cut off. A- shrinks it (stops at 80%). `/wledger size 130` sets 130% and chat confirms. Options > AddOns > Writs Ledger shows the slider at the same value; dragging it resizes the open window. `/reload`: the size is kept.
+16. Tooltips (0.3.0): hover a writ in your bags: below the normal lines (and Auctionator's) a green "Writs Ledger" block shows tier and reputation, "Requests N item (you have N)", the turn-in, the item cost and writ + item. Also on a writ in the AH results and on a writ linked in chat (click the link). Hover any other item: no Writs Ledger lines. A writ done today says "Done today on this character. Daily reset in ...".
+17. Reset timer (0.3.0): the bottom line ends with "Daily reset in X h Y min", counting down (it updates every 2 seconds while the window is open).
+18. Old prices (0.3.0): if your last scan is from yesterday or older, the top right reads "Prices are N days old: scan again." in yellow before "Last scan". After a Full Scan it goes away.
+19. Shopping list (0.3.0):
+    - Tick the box at the start of two rows: the "Shopping list (2)" button counts them and the list panel opens to the right of the table with a writ line and an item line for each ("0/1", "0/10"). Things already in your bags count. Untick one: its lines go.
+    - Open the AH: the panel moves to the right of the AH window. Close the table: the panel stays at the AH. Close the AH with the table closed: the panel goes.
+    - **Search all (N)**: Auctionator's Shopping tab lists every missing writ and item. Buy one listing: within a second its line goes up (e.g. "(5 mail) 5/10"), without opening the mailbox. Buy until a line reaches its count: green with a check. Do this for a commodity (bars, cloth) and for a writ.
+    - Chat with the purchase message from a second AH addon or a chat addon: a purchase still counts once, not twice.
+    - Collect the mail: the "mail" note goes, the count stays the same.
+    - Click a line: a search for just that item. Right-click: the writ leaves the list. Close (X) hides the panel until you click the button again or add a writ. **Clear** empties it.
+    - Turn in a listed writ: it leaves the list. Log in on another character: its list is empty (lists are per character). `/reload`: the list and the mail counts are kept.
+    - While Auctionator scans, **Search all** is greyed out.
+20. Report what the Auction House says in chat when you buy (copy the line), if the shopping list does not tick off.
